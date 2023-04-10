@@ -1,9 +1,16 @@
 package com.vitorpamplona.amethyst.service.model
 
 import com.vitorpamplona.amethyst.model.HexKey
+import com.vitorpamplona.amethyst.model.toByteArray
 import com.vitorpamplona.amethyst.model.toHexKey
+import nostr.postr.Bech32
 import nostr.postr.Utils
-import java.util.Date
+import java.nio.charset.Charset
+import java.security.SecureRandom
+import java.util.*
+import javax.crypto.Cipher
+import javax.crypto.spec.IvParameterSpec
+import javax.crypto.spec.SecretKeySpec
 
 class LnZapRequestEvent(
     id: HexKey,
@@ -28,7 +35,7 @@ class LnZapRequestEvent(
             zapType: LnZapEvent.ZapType,
             createdAt: Long = Date().time / 1000
         ): LnZapRequestEvent {
-            val content = message
+            var content = message
             var privkey = privateKey
             var pubKey = Utils.pubkeyCreate(privateKey).toHexKey()
             var tags = listOf(
@@ -46,10 +53,33 @@ class LnZapRequestEvent(
                 tags = tags + listOf(listOf("anon", ""))
                 privkey = Utils.privkeyCreate()
                 pubKey = Utils.pubkeyCreate(privkey).toHexKey()
+            } else if (zapType == LnZapEvent.ZapType.PRIVATE) {
+                val prkey = sha256.digest((privkey.toHexKey() + originalNote.id() + createdAt.toString()).toByteArray(Charsets.UTF_8))
+                var temptags = listOf(
+                    listOf("e", originalNote.id()),
+                    listOf("p", originalNote.pubKey())
+                )
+                var noteJson = (create(privkey, 9733, temptags, message)).toJson()
+                var notejsonbyte = noteJson.toByteArray(Charset.forName("utf-8"))
+                var sharedSecret = Utils.getSharedSecret(prkey, originalNote.pubKey().toByteArray())
+                var privreq = encryptbech32(notejsonbyte, sharedSecret)
+                tags = tags + listOf(listOf("anon", privreq))
+                content = ""
             }
             val id = generateId(pubKey, createdAt, kind, tags, content)
             val sig = Utils.sign(id, privkey)
             return LnZapRequestEvent(id.toHexKey(), pubKey, createdAt, tags, content, sig.toHexKey())
+        }
+        fun encryptbech32(msg: ByteArray, sharedSecret: ByteArray): String {
+            val iv = ByteArray(16)
+            val random = SecureRandom()
+            random.nextBytes(iv)
+            val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
+            cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(sharedSecret, "AES"), IvParameterSpec(iv))
+            val encryptedMsg = cipher.doFinal(msg)
+            var contentbech32 = Bech32.encode("pzap", Bech32.eight2five(encryptedMsg), Bech32.Encoding.Bech32)
+            var ivbech32 = Bech32.encode("iv", Bech32.eight2five(iv), Bech32.Encoding.Bech32)
+            return contentbech32 + "_" + ivbech32
         }
 
         fun create(
@@ -68,9 +98,9 @@ class LnZapRequestEvent(
                 listOf("relays") + relays
             )
             if (zapType == LnZapEvent.ZapType.ANONYMOUS) {
-                tags = tags + listOf(listOf("anon", ""))
                 privkey = Utils.privkeyCreate()
                 pubKey = Utils.pubkeyCreate(privkey).toHexKey()
+                tags = tags + listOf(listOf("anon", ""))
             }
 
             val id = generateId(pubKey, createdAt, kind, tags, content)
@@ -79,7 +109,6 @@ class LnZapRequestEvent(
         }
     }
 }
-
 /*
 {
   "pubkey": "32e1827635450ebb3c5a7d12c1f8e7b2b514439ac10a67eef3d9fd9c5c68e245",

@@ -60,9 +60,8 @@ class LnZapRequestEvent(
                     listOf("p", originalNote.pubKey())
                 )
                 var noteJson = (create(privkey, 9733, temptags, message)).toJson()
-                var notejsonbyte = noteJson.toByteArray(Charset.forName("utf-8"))
                 var sharedSecret = Utils.getSharedSecret(prkey, originalNote.pubKey().toByteArray())
-                var privreq = encryptbech32(notejsonbyte, sharedSecret)
+                var privreq = encryptbech32(noteJson, sharedSecret)
                 tags = tags + listOf(listOf("anon", privreq))
                 content = ""
             }
@@ -70,13 +69,13 @@ class LnZapRequestEvent(
             val sig = Utils.sign(id, privkey)
             return LnZapRequestEvent(id.toHexKey(), pubKey, createdAt, tags, content, sig.toHexKey())
         }
-        fun encryptbech32(msg: ByteArray, sharedSecret: ByteArray): String {
+        fun encryptbech32(msg: String, sharedSecret: ByteArray): String {
             val iv = ByteArray(16)
             val random = SecureRandom()
             random.nextBytes(iv)
             val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
             cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(sharedSecret, "AES"), IvParameterSpec(iv))
-            val encryptedMsg = cipher.doFinal(msg)
+            val encryptedMsg = cipher.doFinal(msg.toByteArray(Charset.forName("utf-8")))
             var contentbech32 = Bech32.encode("pzap", Bech32.eight2five(encryptedMsg), Bech32.Encoding.Bech32)
             var ivbech32 = Bech32.encode("iv", Bech32.eight2five(iv), Bech32.Encoding.Bech32)
             return contentbech32 + "_" + ivbech32

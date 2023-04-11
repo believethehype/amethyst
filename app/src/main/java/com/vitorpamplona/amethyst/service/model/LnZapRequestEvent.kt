@@ -3,6 +3,7 @@ package com.vitorpamplona.amethyst.service.model
 import com.vitorpamplona.amethyst.model.HexKey
 import com.vitorpamplona.amethyst.model.toByteArray
 import com.vitorpamplona.amethyst.model.toHexKey
+import fr.acinq.secp256k1.Hex
 import nostr.postr.Bech32
 import nostr.postr.Utils
 import java.nio.charset.Charset
@@ -54,12 +55,12 @@ class LnZapRequestEvent(
                 privkey = Utils.privkeyCreate()
                 pubKey = Utils.pubkeyCreate(privkey).toHexKey()
             } else if (zapType == LnZapEvent.ZapType.PRIVATE) {
-                val prkey = sha256.digest((privkey.toHexKey() + originalNote.id() + createdAt.toString()).toByteArray(Charsets.UTF_8))
-                var temptags = listOf(
-                    listOf("e", originalNote.id()),
-                    listOf("p", originalNote.pubKey())
-                )
-                var noteJson = (create(privkey, 9733, temptags, message)).toJson()
+                // Part 1 generate_private_keypair
+                val prkey = Hex.encode(sha256.digest((privkey.toHexKey() + originalNote.id() + createdAt.toString()).toByteArray())).toByteArray()
+                // Part 2 make_private_zap_request_event
+                var note = (create(privkey, 9733, listOf(tags[0], tags[1]), message))
+                // this is different to damus?
+                var noteJson = note.toJson()
                 var sharedSecret = Utils.getSharedSecret(prkey, originalNote.pubKey().toByteArray())
                 var privreq = encryptbech32(noteJson, sharedSecret)
                 tags = tags + listOf(listOf("anon", privreq))
@@ -69,6 +70,7 @@ class LnZapRequestEvent(
             val sig = Utils.sign(id, privkey)
             return LnZapRequestEvent(id.toHexKey(), pubKey, createdAt, tags, content, sig.toHexKey())
         }
+
         fun encryptbech32(msg: String, sharedSecret: ByteArray): String {
             val iv = ByteArray(16)
             val random = SecureRandom()

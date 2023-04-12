@@ -56,56 +56,59 @@ class LnZapRequestEvent(
                 pubKey = Utils.pubkeyCreate(privkey).toHexKey()
             } else if (zapType == LnZapEvent.ZapType.PRIVATE) {
                 // Part 1 generate_private_keypair
-                val prkey = Hex.encode(sha256.digest((privkey.toHexKey() + originalNote.id() + createdAt.toString()).toByteArray())).toByteArray()
+                var enc_prkey = create_private_key(privateKey, originalNote.id(), createdAt)
                 // Part 2 make_private_zap_request_event
                 var note = (create(privkey, 9733, listOf(tags[0], tags[1]), message))
-                // this has different order than damus,
+                // this has different order than damus, shouldnt have to do anything with encoding tho
                 var noteJson = gson.toJson(note)
                     .replace("\\u2028", "\u2028")
                     .replace("\\u2029", "\u2029")
-
-                var sharedSecret = Utils.getSharedSecret(prkey, originalNote.pubKey().toByteArray())
-                var privreq = encryptbech32(noteJson, sharedSecret)
+                // var noteJson = note.toJson()
+                var privreq = encrypt_privatezap_message(noteJson, enc_prkey, pubKey.toByteArray())
                 tags = tags + listOf(listOf("anon", privreq))
                 content = ""
+
+                // The following is for testing only and can be removed later
+                // Here we should use Our privkey instead of enc_prkey, but how does this work?
+                val anonTag = tags.firstOrNull { t -> t.count() >= 2 && t[0] == "anon" }
+                var encnote = anonTag?.elementAt(1)
+                if (encnote != null) {
+                    var test = decrypt_privatezap_message(encnote, enc_prkey, pubKey.toByteArray())
+                    var testevent = fromJson(test)
+                }
             }
             val id = generateId(pubKey, createdAt, kind, tags, content)
             val sig = Utils.sign(id, privkey)
             return LnZapRequestEvent(id.toHexKey(), pubKey, createdAt, tags, content, sig.toHexKey())
         }
 
-        fun encryptbech32(msg: String, sharedSecret: ByteArray): String {
+        fun create_private_key(privkey: ByteArray, id: String, createdAt: Long): ByteArray {
+            val enc_prkeybytes = sha256.digest((privkey.toHexKey() + id + createdAt.toString()).toByteArray(Charset.forName("utf-8")))
+            val enc_prkeyStr = Hex.encode(enc_prkeybytes)
+            return enc_prkeyStr.toByteArray()
+        }
+
+        fun encrypt_privatezap_message(msg: String, privkey: ByteArray, pubkey: ByteArray): String {
+            var sharedSecret = Utils.getSharedSecret(privkey, pubkey)
             val iv = ByteArray(16)
-            val random = SecureRandom()
-            random.nextBytes(iv)
+            SecureRandom().nextBytes(iv)
             val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
             cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(sharedSecret, "AES"), IvParameterSpec(iv))
-            val encryptedMsg = cipher.doFinal(msg.toByteArray(Charset.forName("utf-8")))
-            val contentBech32 = Bech32.encode("pzap", Bech32.eight2five(encryptedMsg), Bech32.Encoding.Bech32)
             val ivBech32 = Bech32.encode("iv", Bech32.eight2five(iv), Bech32.Encoding.Bech32)
-            return contentBech32 + "_" + ivBech32
+            val encryptedMsg = cipher.doFinal(msg.toByteArray(Charset.forName("utf-8")))
+            val encryptedMsgBech32 = Bech32.encode("pzap", Bech32.eight2five(encryptedMsg), Bech32.Encoding.Bech32)
+            return encryptedMsgBech32 + "_" + ivBech32
         }
-        fun decryptbech32(msg: String, sharedSecret: ByteArray): String {
+
+        fun decrypt_privatezap_message(msg: String, privkey: ByteArray, pubkey: ByteArray): String {
+            var sharedSecret = Utils.getSharedSecret(privkey, pubkey)
             val parts = msg.split("_")
-            val iv = Bech32.decode(parts[1])
-            val encryptedMsg = Bech32.decode(parts.first())
+            val iv = parts[1].run { Bech32.decode(this) }
+            val encryptedMsg = parts.first().run { Bech32.decode(this) }
             val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
             cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(sharedSecret, "AES"), IvParameterSpec(Bech32.five2eight(iv.second, 0)))
-            val decryptedMsg = cipher.doFinal(Bech32.five2eight(encryptedMsg.second, 0))
-            return String(decryptedMsg, Charset.forName("utf-8"))
+            return String(cipher.doFinal(Bech32.five2eight(encryptedMsg.second, 0)))
         }
-        fun decrypt_private_zap(privkey: ByteArray, zapreq: Event): String? {
-            val anonTag = zapreq.tags.firstOrNull { t -> t.count() >= 2 && t[0] == "anon" }
-            var encnote = anonTag?.elementAt(1)
-            var sharedSecret = Utils.getSharedSecret(privkey, zapreq.pubKey().toByteArray())
-
-            if (encnote != null) {
-                // TODO
-                return decryptbech32(encnote, sharedSecret)
-            }
-            return ""
-        }
-
         fun create(
             userHex: String,
             relays: Set<String>,

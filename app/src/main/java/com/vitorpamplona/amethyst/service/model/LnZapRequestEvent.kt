@@ -1,7 +1,6 @@
 package com.vitorpamplona.amethyst.service.model
 
 import com.vitorpamplona.amethyst.model.*
-import fr.acinq.secp256k1.Hex
 import nostr.postr.Bech32
 import nostr.postr.Utils
 import java.nio.charset.Charset
@@ -53,29 +52,13 @@ class LnZapRequestEvent(
                 privkey = Utils.privkeyCreate()
                 pubKey = Utils.pubkeyCreate(privkey).toHexKey()
             } else if (zapType == LnZapEvent.ZapType.PRIVATE) {
-                // Part 1 generate_private_keypair
                 var enc_prkey = create_private_key(privateKey, originalNote.id(), createdAt)
-                // Part 2 make_private_zap_request_event
-                var note = (create(privkey, 9733, listOf(tags[0], tags[1]), message))
-                // this has different order than damus, shouldnt have to do anything with encoding tho
-                var noteJson = gson.toJson(note)
-                    .replace("\\u2028", "\u2028")
-                    .replace("\\u2029", "\u2029")
-                // var noteJson = note.toJson()
-                var privreq = encrypt_privatezap_message(noteJson, enc_prkey, pubKey.toByteArray())
+                var noteJson = (create(privkey, 9733, listOf(tags[0], tags[1]), message)).toJson()
+                var privreq = encrypt_privatezap_message(noteJson, enc_prkey, originalNote.pubKey().toByteArray())
                 tags = tags + listOf(listOf("anon", privreq))
                 content = ""
-
-                // The following is for testing only and can be removed later
-                val anonTag = tags.firstOrNull { t -> t.count() >= 2 && t[0] == "anon" }
-                var encnote = anonTag?.elementAt(1)
-                if (encnote != null) {
-                    // Here we should use Our privkey instead of enc_prkey, but how does this work?
-                    // This is and has to be the same key right now
-                    var enc_prkey2 = create_private_key(privateKey, originalNote.id(), createdAt)
-                    var test = decrypt_privatezap_message(encnote, enc_prkey2, pubKey.toByteArray())
-                    var testevent = fromJson(test)
-                }
+                privkey = enc_prkey
+                pubKey = Utils.pubkeyCreate(enc_prkey).toHexKey()
             }
             val id = generateId(pubKey, createdAt, kind, tags, content)
             val sig = Utils.sign(id, privkey)
@@ -83,9 +66,9 @@ class LnZapRequestEvent(
         }
 
         fun create_private_key(privkey: ByteArray, id: String, createdAt: Long): ByteArray {
-            val enc_prkeybytes = sha256.digest((privkey.toHexKey() + id + createdAt.toString()).toByteArray(Charset.forName("utf-8")))
-            val enc_prkeyStr = Hex.encode(enc_prkeybytes)
-            return enc_prkeyStr.toByteArray()
+            var str = privkey.toHexKey() + id + createdAt.toString()
+            var strbyte = str.toByteArray(Charset.forName("utf-8"))
+            return sha256.digest(strbyte)
         }
 
         fun encrypt_privatezap_message(msg: String, privkey: ByteArray, pubkey: ByteArray): String {
@@ -96,9 +79,10 @@ class LnZapRequestEvent(
             val keySpec = SecretKeySpec(sharedSecret, "AES")
             val ivSpec = IvParameterSpec(iv)
 
-            val cipher = Cipher.getInstance("AES/CBC/PKCS7Padding")
+            var utf8_message = msg.toByteArray(Charset.forName("utf-8"))
+            val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
             cipher.init(Cipher.ENCRYPT_MODE, keySpec, ivSpec)
-            val encryptedMsg = cipher.doFinal(msg.toByteArray(Charset.forName("utf-8")))
+            val encryptedMsg = cipher.doFinal(utf8_message)
 
             val encryptedMsgBech32 = Bech32.encode("pzap", Bech32.eight2five(encryptedMsg), Bech32.Encoding.Bech32)
             val ivBech32 = Bech32.encode("iv", Bech32.eight2five(iv), Bech32.Encoding.Bech32)
@@ -111,9 +95,22 @@ class LnZapRequestEvent(
             val parts = msg.split("_")
             val iv = parts[1].run { Bech32.decode(this) }
             val encryptedMsg = parts.first().run { Bech32.decode(this) }
-            val cipher = Cipher.getInstance("AES/CBC/PKCS7Padding")
+            val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
             cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(sharedSecret, "AES"), IvParameterSpec(Bech32.five2eight(iv.second, 0)))
             return String(cipher.doFinal(Bech32.five2eight(encryptedMsg.second, 0)))
+        }
+
+        fun test_decrypt(privateKey: ByteArray, event: Event): String {
+            val anonTag = event.tags.firstOrNull { t -> t.count() >= 2 && t[0] == "anon" }
+            var encnote = anonTag?.elementAt(1)
+            if (encnote != null) {
+                // Here we should use Our privkey instead of enc_prkey, but how does this work?
+                // This is and has to be the same key right now
+                var enc_prkey2 = create_private_key(privateKey, event.id(), event.createdAt)
+                return decrypt_privatezap_message(encnote, enc_prkey2, event.pubKey().toByteArray())
+            } else {
+                return ""
+            }
         }
         fun create(
             userHex: String,

@@ -1,8 +1,7 @@
 package com.vitorpamplona.amethyst.service.model
 
-import com.vitorpamplona.amethyst.model.HexKey
-import com.vitorpamplona.amethyst.model.toByteArray
-import com.vitorpamplona.amethyst.model.toHexKey
+import com.vitorpamplona.amethyst.model.*
+import com.vitorpamplona.amethyst.service.relays.Client
 import fr.acinq.secp256k1.Hex
 import nostr.postr.Bech32
 import nostr.postr.Utils
@@ -69,11 +68,13 @@ class LnZapRequestEvent(
                 content = ""
 
                 // The following is for testing only and can be removed later
-                // Here we should use Our privkey instead of enc_prkey, but how does this work?
                 val anonTag = tags.firstOrNull { t -> t.count() >= 2 && t[0] == "anon" }
                 var encnote = anonTag?.elementAt(1)
                 if (encnote != null) {
-                    var test = decrypt_privatezap_message(encnote, enc_prkey, pubKey.toByteArray())
+                    // Here we should use Our privkey instead of enc_prkey, but how does this work?
+                    // This is and has to be the same key right now
+                    var enc_prkey2 = create_private_key(privateKey, originalNote.id(), createdAt)
+                    var test = decrypt_privatezap_message(encnote, enc_prkey2, pubKey.toByteArray())
                     var testevent = fromJson(test)
                 }
             }
@@ -92,12 +93,37 @@ class LnZapRequestEvent(
             var sharedSecret = Utils.getSharedSecret(privkey, pubkey)
             val iv = ByteArray(16)
             SecureRandom().nextBytes(iv)
+
+            val keySpec = SecretKeySpec(sharedSecret, "AES")
+            val ivSpec = IvParameterSpec(iv)
+
             val cipher = Cipher.getInstance("AES/CBC/PKCS7Padding")
-            cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(sharedSecret, "AES"), IvParameterSpec(iv))
-            val ivBech32 = Bech32.encode("iv", Bech32.eight2five(iv), Bech32.Encoding.Bech32)
+            cipher.init(Cipher.ENCRYPT_MODE, keySpec, ivSpec)
             val encryptedMsg = cipher.doFinal(msg.toByteArray(Charset.forName("utf-8")))
+
             val encryptedMsgBech32 = Bech32.encode("pzap", Bech32.eight2five(encryptedMsg), Bech32.Encoding.Bech32)
+            val ivBech32 = Bech32.encode("iv", Bech32.eight2five(iv), Bech32.Encoding.Bech32)
+
             return encryptedMsgBech32 + "_" + ivBech32
+        }
+
+        fun sendPrivateMessage(message: String, toUser: String, replyingTo: Note? = null, mentions: List<User>?) {
+            val user = LocalCache.users[toUser] ?: return
+
+            val repliesToHex = listOfNotNull(replyingTo?.idHex).ifEmpty { null }
+            val mentionsHex = mentions?.map { it.pubkeyHex }
+
+            val signedEvent = PrivateDmEvent.create(
+                recipientPubKey = user.pubkey(),
+                publishedRecipientPubKey = user.pubkey(),
+                msg = message,
+                replyTos = repliesToHex,
+                mentions = mentionsHex,
+                privateKey = loggedIn.privKey!!,
+                advertiseNip18 = false
+            )
+            Client.send(signedEvent)
+            LocalCache.consume(signedEvent, null)
         }
 
         fun decrypt_privatezap_message(msg: String, privkey: ByteArray, pubkey: ByteArray): String {
@@ -117,7 +143,7 @@ class LnZapRequestEvent(
             zapType: LnZapEvent.ZapType,
             createdAt: Long = Date().time / 1000
         ): LnZapRequestEvent {
-            val content = message
+            var content = message
             var privkey = privateKey
             var pubKey = Utils.pubkeyCreate(privateKey).toHexKey()
             var tags = listOf(
@@ -128,6 +154,27 @@ class LnZapRequestEvent(
                 privkey = Utils.privkeyCreate()
                 pubKey = Utils.pubkeyCreate(privkey).toHexKey()
                 tags = tags + listOf(listOf("anon", ""))
+            } else if (zapType == LnZapEvent.ZapType.PRIVATE) {
+                var enc_prkey = create_private_key(privateKey, userHex, createdAt)
+                var note = (create(privkey, 9733, listOf(tags[0], tags[1]), message))
+                var noteJson = gson.toJson(note)
+                    .replace("\\u2028", "\u2028")
+                    .replace("\\u2029", "\u2029")
+                var privreq = encrypt_privatezap_message(noteJson, enc_prkey, pubKey.toByteArray())
+                tags = tags + listOf(listOf("anon", privreq))
+                content = ""
+
+                // The following is for testing only and can be removed later
+                val anonTag = tags.firstOrNull { t -> t.count() >= 2 && t[0] == "anon" }
+                var encnote = anonTag?.elementAt(1)
+                if (encnote != null) {
+                    // Here we should use Our privkey instead of enc_prkey, but how does this work?
+                    // This is and has to be the same key right now
+                    var enc_prkey2 = create_private_key(privateKey, userHex, createdAt)
+
+                    var test = decrypt_privatezap_message(encnote, enc_prkey2, pubKey.toByteArray())
+                    var testevent = fromJson(test)
+                }
             }
 
             val id = generateId(pubKey, createdAt, kind, tags, content)

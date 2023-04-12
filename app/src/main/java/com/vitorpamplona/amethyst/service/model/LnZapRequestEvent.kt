@@ -1,7 +1,6 @@
 package com.vitorpamplona.amethyst.service.model
 
 import com.vitorpamplona.amethyst.model.*
-import com.vitorpamplona.amethyst.service.relays.Client
 import fr.acinq.secp256k1.Hex
 import nostr.postr.Bech32
 import nostr.postr.Utils
@@ -105,25 +104,6 @@ class LnZapRequestEvent(
             val ivBech32 = Bech32.encode("iv", Bech32.eight2five(iv), Bech32.Encoding.Bech32)
 
             return encryptedMsgBech32 + "_" + ivBech32
-        }
-
-        fun sendPrivateMessage(message: String, toUser: String, replyingTo: Note? = null, mentions: List<User>?) {
-            val user = LocalCache.users[toUser] ?: return
-
-            val repliesToHex = listOfNotNull(replyingTo?.idHex).ifEmpty { null }
-            val mentionsHex = mentions?.map { it.pubkeyHex }
-
-            val signedEvent = PrivateDmEvent.create(
-                recipientPubKey = user.pubkey(),
-                publishedRecipientPubKey = user.pubkey(),
-                msg = message,
-                replyTos = repliesToHex,
-                mentions = mentionsHex,
-                privateKey = loggedIn.privKey!!,
-                advertiseNip18 = false
-            )
-            Client.send(signedEvent)
-            LocalCache.consume(signedEvent, null)
         }
 
         fun decrypt_privatezap_message(msg: String, privkey: ByteArray, pubkey: ByteArray): String {

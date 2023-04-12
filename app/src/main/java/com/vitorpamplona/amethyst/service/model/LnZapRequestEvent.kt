@@ -92,7 +92,7 @@ class LnZapRequestEvent(
             var sharedSecret = Utils.getSharedSecret(privkey, pubkey)
             val iv = ByteArray(16)
             SecureRandom().nextBytes(iv)
-            val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
+            val cipher = Cipher.getInstance("AES/CBC/PKCS7Padding")
             cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(sharedSecret, "AES"), IvParameterSpec(iv))
             val ivBech32 = Bech32.encode("iv", Bech32.eight2five(iv), Bech32.Encoding.Bech32)
             val encryptedMsg = cipher.doFinal(msg.toByteArray(Charset.forName("utf-8")))
@@ -105,7 +105,7 @@ class LnZapRequestEvent(
             val parts = msg.split("_")
             val iv = parts[1].run { Bech32.decode(this) }
             val encryptedMsg = parts.first().run { Bech32.decode(this) }
-            val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
+            val cipher = Cipher.getInstance("AES/CBC/PKCS7Padding")
             cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(sharedSecret, "AES"), IvParameterSpec(Bech32.five2eight(iv.second, 0)))
             return String(cipher.doFinal(Bech32.five2eight(encryptedMsg.second, 0)))
         }

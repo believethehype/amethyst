@@ -123,6 +123,9 @@ open class Note(val idHex: String) {
     var reactions = mapOf<String, List<Note>>()
         private set
 
+    var recommendations = listOf<Note>()
+        private set
+
     var boosts = listOf<Note>()
         private set
 
@@ -333,6 +336,7 @@ open class Note(val idHex: String) {
         val toBeRemoved =
             replies +
                 reactions.values.flatten() +
+                recommendations +
                 boosts +
                 reports.values.flatten() +
                 zaps.keys +
@@ -627,6 +631,16 @@ open class Note(val idHex: String) {
         }
     }
 
+    fun getRecommendationBy(user: User): String? {
+        return recommendations.firstNotNullOfOrNull {
+            if (it.author?.pubkeyHex == user.pubkeyHex) {
+                it.idHex
+            } else {
+                null
+            }
+        }
+    }
+
     fun isBoostedBy(user: User): Boolean {
         return boosts.any { it.author?.pubkeyHex == user.pubkeyHex }
     }
@@ -785,11 +799,22 @@ open class Note(val idHex: String) {
         return zaps.any { it.key.author == loggedIn }
     }
 
+    fun hasRcommended(
+        loggedIn: User,
+        content: String,
+    ): Boolean {
+        return reactedBy(loggedIn, content).isNotEmpty()
+    }
+
     fun hasReacted(
         loggedIn: User,
         content: String,
     ): Boolean {
         return reactedBy(loggedIn, content).isNotEmpty()
+    }
+
+    fun hasRecommended(loggedIn: User): Boolean {
+        return recommendedBy(loggedIn).isNotEmpty()
     }
 
     fun reactedBy(
@@ -801,6 +826,10 @@ open class Note(val idHex: String) {
 
     fun reactedBy(loggedIn: User): List<String> {
         return reactions.filter { it.value.any { it.author == loggedIn } }.mapNotNull { it.key }
+    }
+
+    fun recommendedBy(loggedIn: User): List<Note> {
+        return recommendations.filter { it.author == loggedIn } ?: emptyList()
     }
 
     fun hasBoostedInTheLast5Minutes(loggedIn: User): Boolean {
@@ -970,6 +999,7 @@ class NoteLiveSet(u: Note) {
     // Observers line up here.
     val innerMetadata = NoteBundledRefresherLiveData(u)
     val innerReactions = NoteBundledRefresherLiveData(u)
+    val innerRecommendations = NoteBundledRefresherLiveData(u)
     val innerBoosts = NoteBundledRefresherLiveData(u)
     val innerReplies = NoteBundledRefresherLiveData(u)
     val innerReports = NoteBundledRefresherLiveData(u)
@@ -980,6 +1010,7 @@ class NoteLiveSet(u: Note) {
 
     val metadata = innerMetadata.map { it }
     val reactions = innerReactions.map { it }
+    val recommendations = innerRecommendations.map { it }
     val boosts = innerBoosts.map { it }
     val replies = innerReplies.map { it }
     val reports = innerReports.map { it }
@@ -1018,6 +1049,7 @@ class NoteLiveSet(u: Note) {
     fun isInUse(): Boolean {
         return metadata.hasObservers() ||
             reactions.hasObservers() ||
+            recommendations.hasObservers() ||
             boosts.hasObservers() ||
             replies.hasObservers() ||
             reports.hasObservers() ||
@@ -1035,6 +1067,7 @@ class NoteLiveSet(u: Note) {
     fun destroy() {
         innerMetadata.destroy()
         innerReactions.destroy()
+        innerRecommendations.destroy()
         innerBoosts.destroy()
         innerReplies.destroy()
         innerReports.destroy()

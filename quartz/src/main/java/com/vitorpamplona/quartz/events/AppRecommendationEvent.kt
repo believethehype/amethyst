@@ -43,14 +43,12 @@ class AppRecommendationEvent(
 
         fun create(
             signer: NostrSigner,
+            tags: Array<Array<String>>,
             createdAt: Long = TimeUtils.now(),
             onReady: (AppRecommendationEvent) -> Unit,
         ) {
-            val tags =
-                arrayOf(
-                    arrayOf("alt", ALT),
-                )
-            signer.sign(createdAt, KIND, tags, "", onReady)
+            var finalTags = tags + arrayOf("alt", ALT)
+            signer.sign(createdAt, KIND, finalTags, "", onReady)
         }
     }
 }

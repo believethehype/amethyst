@@ -791,7 +791,7 @@ fun RenderContentDVMThumb(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = RowColSpacing,
             ) {
-                LikeReaction(
+                RecommendReaction(
                     baseNote = baseNote,
                     grayTint = MaterialTheme.colorScheme.onSurface,
                     accountViewModel = accountViewModel,

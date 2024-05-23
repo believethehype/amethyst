@@ -179,6 +179,10 @@ class AccountViewModel(val account: Account, val settings: SettingsState) : View
         account.reactTo(note, reaction)
     }
 
+    suspend fun recommendApp(note: Note) {
+        account.recommend(note)
+    }
+
     fun <T : Event> observeByETag(
         kind: Int,
         eTag: HexKey,
@@ -223,6 +227,16 @@ class AccountViewModel(val account: Account, val settings: SettingsState) : View
         }
     }
 
+    fun recommendtoOrDelete(note: Note) {
+        viewModelScope.launch(Dispatchers.IO) {
+            if (hasRecommended(note)) {
+                deleteRecommendation(note) // TODO implement
+            } else {
+                recommendApp(note)
+            }
+        }
+    }
+
     fun isNoteHidden(note: Note): Boolean {
         return note.isHiddenFor(account.flowHiddenUsers.value)
     }
@@ -234,11 +248,19 @@ class AccountViewModel(val account: Account, val settings: SettingsState) : View
         return account.hasReacted(baseNote, reaction)
     }
 
+    fun hasRecommended(baseNote: Note): Boolean {
+        return account.hasRecommended(baseNote)
+    }
+
     suspend fun deleteReactionTo(
         note: Note,
         reaction: String,
     ) {
         account.delete(account.reactionTo(note, reaction))
+    }
+
+    suspend fun deleteRecommendation(note: Note) {
+        account.delete(account.recommendation(note))
     }
 
     fun hasBoosted(baseNote: Note): Boolean {
@@ -832,6 +854,12 @@ class AccountViewModel(val account: Account, val settings: SettingsState) : View
         if (note == null) return null
 
         return note.getReactionBy(userProfile())
+    }
+
+    suspend fun loadRecommendationTo(note: Note?): String? {
+        if (note == null) return null
+
+        return note.getRecommendationBy(userProfile())
     }
 
     fun verifyNip05(

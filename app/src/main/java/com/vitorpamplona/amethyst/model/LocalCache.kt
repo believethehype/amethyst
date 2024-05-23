@@ -1043,7 +1043,7 @@ object LocalCache {
         refreshObservers(note)
     }
 
-    private fun comsume(
+    private fun consume(
         event: NNSEvent,
         relay: Relay?,
     ) {
@@ -1052,6 +1052,13 @@ object LocalCache {
 
     fun consume(
         event: AppDefinitionEvent,
+        relay: Relay?,
+    ) {
+        consumeBaseReplaceable(event, relay)
+    }
+
+    fun consume(
+        event: AppRecommendationEvent,
         relay: Relay?,
     ) {
         consumeBaseReplaceable(event, relay)
@@ -1113,13 +1120,6 @@ object LocalCache {
 
             refreshObservers(note)
         }
-    }
-
-    fun consume(
-        event: AppRecommendationEvent,
-        relay: Relay?,
-    ) {
-        consumeBaseReplaceable(event, relay)
     }
 
     @Suppress("UNUSED_PARAMETER")
@@ -2488,7 +2488,7 @@ object LocalCache {
                 is LongTextNoteEvent -> consume(event, relay)
                 is MetadataEvent -> consume(event, relay)
                 is MuteListEvent -> consume(event, relay)
-                is NNSEvent -> comsume(event, relay)
+                is NNSEvent -> consume(event, relay)
                 is OtsEvent -> consume(event, relay)
                 is PrivateDmEvent -> consume(event, relay)
                 is PinListEvent -> consume(event, relay)

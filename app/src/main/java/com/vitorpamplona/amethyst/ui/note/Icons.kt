@@ -171,6 +171,19 @@ fun LikeIcon(
 }
 
 @Composable
+fun RecommendIcon(
+    iconSizeModifier: Modifier,
+    grayTint: Color,
+) {
+    Icon(
+        painter = painterResource(R.drawable.ic_trends),
+        contentDescription = stringResource(id = R.string.like_description),
+        modifier = iconSizeModifier,
+        tint = grayTint,
+    )
+}
+
+@Composable
 fun RepostedIcon(
     modifier: Modifier,
     tint: Color = Color.Unspecified,

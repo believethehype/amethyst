@@ -837,6 +837,71 @@ fun LikeReaction(
     ObserveLikeText(baseNote) { reactionCount -> SlidingAnimationCount(reactionCount, grayTint) }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun RecommendReaction(
+    baseNote: Note,
+    grayTint: Color,
+    accountViewModel: AccountViewModel,
+    nav: (String) -> Unit,
+    iconSize: Dp = Size20dp,
+    heartSizeModifier: Modifier = Size16Modifier,
+    iconFontSize: TextUnit = Font14SP,
+) {
+    var wantsToChangeReactionSymbol by remember { mutableStateOf(false) }
+    var wantsToReact by remember { mutableStateOf(false) }
+
+    Box(
+        contentAlignment = Center,
+        modifier =
+            Modifier
+                .combinedClickable(
+                    role = Role.Button,
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = rememberRipple(bounded = false, radius = Size24dp),
+                    onClick = {
+                        recommendClick(
+                            accountViewModel,
+                            baseNote,
+                            onWantsToSignRecommendation = { accountViewModel.recommendtoOrDelete(baseNote) },
+                        )
+                    },
+                    onLongClick = { },
+                ),
+    ) {
+        ObserveReommendIcon(baseNote, accountViewModel) { reactionType ->
+            Crossfade(targetState = reactionType, label = "RecommendIcon") {
+                if (it != null) {
+                    RenderReactionType(it, heartSizeModifier, iconFontSize)
+                } else {
+                    RecommendIcon(heartSizeModifier, grayTint)
+                }
+            }
+        }
+    }
+
+    ObserveLikeText(baseNote) { reactionCount -> SlidingAnimationCount(reactionCount, grayTint) }
+}
+
+@Composable
+fun ObserveRecommedIcon(
+    baseNote: Note,
+    accountViewModel: AccountViewModel,
+    inner: @Composable (String?) -> Unit,
+) {
+    val reactionsState by baseNote.live().recommendations.observeAsState()
+
+    val reactionType by
+        produceState(initialValue = null as String?, key1 = reactionsState) {
+            val newReactionType = accountViewModel.loadReactionTo(reactionsState?.note)
+            if (value != newReactionType) {
+                value = newReactionType
+            }
+        }
+
+    inner(reactionType)
+}
+
 @Composable
 fun ObserveLikeIcon(
     baseNote: Note,
@@ -848,6 +913,25 @@ fun ObserveLikeIcon(
     val reactionType by
         produceState(initialValue = null as String?, key1 = reactionsState) {
             val newReactionType = accountViewModel.loadReactionTo(reactionsState?.note)
+            if (value != newReactionType) {
+                value = newReactionType
+            }
+        }
+
+    inner(reactionType)
+}
+
+@Composable
+fun ObserveReommendIcon(
+    baseNote: Note,
+    accountViewModel: AccountViewModel,
+    inner: @Composable (String?) -> Unit,
+) {
+    val recommendationState by baseNote.live().recommendations.observeAsState()
+
+    val reactionType by
+        produceState(initialValue = null as String?, key1 = recommendationState) {
+            val newReactionType = accountViewModel.loadRecommendationTo(recommendationState?.note)
             if (value != newReactionType) {
                 value = newReactionType
             }
@@ -922,6 +1006,33 @@ private fun likeClick(
         onWantsToSignReaction()
     } else if (accountViewModel.account.reactionChoices.size > 1) {
         onMultipleChoices()
+    }
+}
+
+private fun recommendClick(
+    accountViewModel: AccountViewModel,
+    baseNote: Note,
+    onWantsToSignRecommendation: () -> Unit,
+) {
+    if (baseNote.isDraft()) {
+        accountViewModel.toast(
+            R.string.draft_note,
+            R.string.it_s_not_possible_to_react_to_a_draft_note,
+        )
+        return
+    }
+    if (accountViewModel.account.reactionChoices.isEmpty()) {
+        accountViewModel.toast(
+            R.string.no_reactions_setup,
+            R.string.no_reaction_type_setup_long_press_to_change,
+        )
+    } else if (!accountViewModel.isWriteable()) {
+        accountViewModel.toast(
+            R.string.read_only_user,
+            R.string.login_with_a_private_key_to_like_posts,
+        )
+    } else {
+        onWantsToSignRecommendation()
     }
 }
 

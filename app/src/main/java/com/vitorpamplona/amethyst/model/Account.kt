@@ -47,6 +47,8 @@ import com.vitorpamplona.quartz.encoders.HexKey
 import com.vitorpamplona.quartz.encoders.Nip47WalletConnect
 import com.vitorpamplona.quartz.encoders.hexToByteArray
 import com.vitorpamplona.quartz.encoders.toHexKey
+import com.vitorpamplona.quartz.events.AppDefinitionEvent
+import com.vitorpamplona.quartz.events.AppRecommendationEvent
 import com.vitorpamplona.quartz.events.BookmarkListEvent
 import com.vitorpamplona.quartz.events.ChannelCreateEvent
 import com.vitorpamplona.quartz.events.ChannelMessageEvent
@@ -560,6 +562,10 @@ class Account(
         return note.reactedBy(userProfile(), reaction)
     }
 
+    fun recommendation(note: Note): List<Note> {
+        return note.recommendedBy(userProfile())
+    }
+
     fun hasBoosted(note: Note): Boolean {
         return boostsTo(note).isNotEmpty()
     }
@@ -573,6 +579,10 @@ class Account(
         reaction: String,
     ): Boolean {
         return note.hasReacted(userProfile(), reaction)
+    }
+
+    fun hasRecommended(note: Note): Boolean {
+        return note.hasRecommended(userProfile())
     }
 
     suspend fun reactTo(
@@ -639,6 +649,34 @@ class Account(
                     Client.send(it)
                     LocalCache.consume(it)
                 }
+            }
+        }
+    }
+
+    suspend fun recommend(note: Note) {
+        if (!isWriteable()) return
+
+       /* if (hasReacted(note, reaction)) {
+            // has already liked this note
+            return
+        } */
+
+        var tags: Array<Array<String>> = arrayOf()
+        if (note.event is AppDefinitionEvent) {
+            for (kind in (note.event as AppDefinitionEvent).supportedKinds()) {
+                println(kind.toString())
+                tags += arrayOf("d", kind.toString())
+            }
+        }
+
+        note.let { it ->
+            var atg = note.address()?.toTag()!!
+            println(atg)
+            tags += arrayOf("a", atg, "", "dvm")
+
+            AppRecommendationEvent.create(signer, tags) {
+                Client.send(it)
+                LocalCache.consume(it, null)
             }
         }
     }

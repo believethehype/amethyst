@@ -47,13 +47,13 @@ import com.vitorpamplona.quartz.encoders.HexKey
 import com.vitorpamplona.quartz.encoders.Nip47WalletConnect
 import com.vitorpamplona.quartz.encoders.hexToByteArray
 import com.vitorpamplona.quartz.encoders.toHexKey
-import com.vitorpamplona.quartz.events.AppDefinitionEvent
-import com.vitorpamplona.quartz.events.AppRecommendationEvent
+import com.vitorpamplona.quartz.events.AdvertisedRelayListEvent
 import com.vitorpamplona.quartz.events.BookmarkListEvent
 import com.vitorpamplona.quartz.events.ChannelCreateEvent
 import com.vitorpamplona.quartz.events.ChannelMessageEvent
 import com.vitorpamplona.quartz.events.ChannelMetadataEvent
 import com.vitorpamplona.quartz.events.ChatMessageEvent
+import com.vitorpamplona.quartz.events.ChatMessageRelayListEvent
 import com.vitorpamplona.quartz.events.ClassifiedsEvent
 import com.vitorpamplona.quartz.events.Contact
 import com.vitorpamplona.quartz.events.ContactListEvent
@@ -562,10 +562,6 @@ class Account(
         return note.reactedBy(userProfile(), reaction)
     }
 
-    fun recommendation(note: Note): List<Note> {
-        return note.recommendedBy(userProfile())
-    }
-
     fun hasBoosted(note: Note): Boolean {
         return boostsTo(note).isNotEmpty()
     }
@@ -579,10 +575,6 @@ class Account(
         reaction: String,
     ): Boolean {
         return note.hasReacted(userProfile(), reaction)
-    }
-
-    fun hasRecommended(note: Note): Boolean {
-        return note.hasRecommended(userProfile())
     }
 
     suspend fun reactTo(
@@ -649,34 +641,6 @@ class Account(
                     Client.send(it)
                     LocalCache.consume(it)
                 }
-            }
-        }
-    }
-
-    suspend fun recommend(note: Note) {
-        if (!isWriteable()) return
-
-       /* if (hasReacted(note, reaction)) {
-            // has already liked this note
-            return
-        } */
-
-        var tags: Array<Array<String>> = arrayOf()
-        if (note.event is AppDefinitionEvent) {
-            for (kind in (note.event as AppDefinitionEvent).supportedKinds()) {
-                println(kind.toString())
-                tags += arrayOf("d", kind.toString())
-            }
-        }
-
-        note.let { it ->
-            var atg = note.address()?.toTag()!!
-            println(atg)
-            tags += arrayOf("a", atg, "", "dvm")
-
-            AppRecommendationEvent.create(signer, tags) {
-                Client.send(it)
-                LocalCache.consume(it, null)
             }
         }
     }
@@ -2580,6 +2544,68 @@ class Account(
             )
         } finally {
             saveable.invalidateData()
+        }
+    }
+
+    fun getDMRelayList(): ChatMessageRelayListEvent? {
+        return LocalCache.getOrCreateAddressableNote(
+            ChatMessageRelayListEvent.createAddressATag(signer.pubKey),
+        ).event as? ChatMessageRelayListEvent
+    }
+
+    fun saveDMRelayList(dmRelays: List<String>) {
+        if (!isWriteable()) return
+
+        val relayListForDMs =
+            LocalCache.getOrCreateAddressableNote(
+                ChatMessageRelayListEvent.createAddressATag(signer.pubKey),
+            ).event as? ChatMessageRelayListEvent
+
+        if (relayListForDMs != null && relayListForDMs.tags.isNotEmpty()) {
+            ChatMessageRelayListEvent.updateRelayList(
+                earlierVersion = relayListForDMs,
+                relays = dmRelays,
+                signer = signer,
+            ) {
+                Client.send(it)
+                LocalCache.justConsume(it, null)
+            }
+        } else {
+            ChatMessageRelayListEvent.createFromScratch(
+                relays = dmRelays,
+                signer = signer,
+            ) {
+                Client.send(it)
+                LocalCache.justConsume(it, null)
+            }
+        }
+    }
+
+    fun sendNip65RelayList(relays: List<AdvertisedRelayListEvent.AdvertisedRelayInfo>) {
+        if (!isWriteable()) return
+
+        val nip65RelayList =
+            LocalCache.getOrCreateAddressableNote(
+                AdvertisedRelayListEvent.createAddressATag(signer.pubKey),
+            ).event as? AdvertisedRelayListEvent
+
+        if (nip65RelayList != null) {
+            AdvertisedRelayListEvent.updateRelayList(
+                earlierVersion = nip65RelayList,
+                relays = relays,
+                signer = signer,
+            ) {
+                Client.send(it)
+                LocalCache.justConsume(it, null)
+            }
+        } else {
+            AdvertisedRelayListEvent.createFromScratch(
+                relays = relays,
+                signer = signer,
+            ) {
+                Client.send(it)
+                LocalCache.justConsume(it, null)
+            }
         }
     }
 

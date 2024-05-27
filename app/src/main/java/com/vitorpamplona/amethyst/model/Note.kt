@@ -31,7 +31,7 @@ import com.vitorpamplona.amethyst.service.checkNotInMainThread
 import com.vitorpamplona.amethyst.service.firstFullCharOrEmoji
 import com.vitorpamplona.amethyst.service.relays.EOSETime
 import com.vitorpamplona.amethyst.service.relays.Relay
-import com.vitorpamplona.amethyst.ui.actions.updated
+import com.vitorpamplona.amethyst.ui.actions.relays.updated
 import com.vitorpamplona.amethyst.ui.components.BundledUpdate
 import com.vitorpamplona.amethyst.ui.note.combineWith
 import com.vitorpamplona.amethyst.ui.note.toShortenHex
@@ -40,6 +40,7 @@ import com.vitorpamplona.quartz.encoders.Hex
 import com.vitorpamplona.quartz.encoders.HexKey
 import com.vitorpamplona.quartz.encoders.LnInvoiceUtil
 import com.vitorpamplona.quartz.encoders.Nip19Bech32
+import com.vitorpamplona.quartz.encoders.RelayUrlFormatter
 import com.vitorpamplona.quartz.encoders.toNote
 import com.vitorpamplona.quartz.events.AddressableEvent
 import com.vitorpamplona.quartz.events.BaseTextNoteEvent
@@ -71,9 +72,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import java.math.BigDecimal
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import kotlin.coroutines.resume
 
 @Stable
@@ -211,98 +209,6 @@ open class Note(val idHex: String) {
             liveSet?.innerMetadata?.invalidateData()
             flowSet?.metadata?.invalidateData()
         }
-    }
-
-    val levelFormatter = DateTimeFormatter.ofPattern("uuuu-MM-dd-HH:mm:ss")
-
-    fun formattedDateTime(timestamp: Long): String {
-        return Instant.ofEpochSecond(timestamp)
-            .atZone(ZoneId.systemDefault())
-            .format(levelFormatter)
-    }
-
-    data class LevelSignature(val signature: String, val createdAt: Long?, val author: User?)
-
-    /**
-     * This method caches signatures during each execution to avoid recalculation in longer threads
-     */
-    fun replyLevelSignature(
-        eventsToConsider: Set<HexKey>,
-        cachedSignatures: MutableMap<Note, LevelSignature>,
-        account: User,
-        accountFollowingSet: Set<String>,
-        now: Long,
-    ): LevelSignature {
-        val replyTo = replyTo
-        if (
-            event is RepostEvent || event is GenericRepostEvent || replyTo == null || replyTo.isEmpty()
-        ) {
-            return LevelSignature(
-                signature = "/" + formattedDateTime(createdAt() ?: 0) + idHex.substring(0, 8) + ";",
-                createdAt = createdAt(),
-                author = author,
-            )
-        }
-
-        val parent =
-            (
-                replyTo
-                    .filter {
-                        it.idHex in eventsToConsider
-                    } // This forces the signature to be based on a branch, avoiding two roots
-                    .map {
-                        cachedSignatures[it]
-                            ?: it
-                                .replyLevelSignature(
-                                    eventsToConsider,
-                                    cachedSignatures,
-                                    account,
-                                    accountFollowingSet,
-                                    now,
-                                )
-                                .apply { cachedSignatures.put(it, this) }
-                    }
-                    .maxByOrNull { it.signature.length }
-            )
-
-        val parentSignature = parent?.signature?.removeSuffix(";") ?: ""
-
-        val threadOrder =
-            if (parent?.author == author && createdAt() != null) {
-                // author of the thread first, in **ascending** order
-                "9" +
-                    formattedDateTime((parent?.createdAt ?: 0) + (now - (createdAt() ?: 0))) +
-                    idHex.substring(0, 8)
-            } else if (author?.pubkeyHex == account.pubkeyHex) {
-                "8" + formattedDateTime(createdAt() ?: 0) + idHex.substring(0, 8) // my replies
-            } else if (author?.pubkeyHex in accountFollowingSet) {
-                "7" + formattedDateTime(createdAt() ?: 0) + idHex.substring(0, 8) // my follows replies.
-            } else {
-                "0" + formattedDateTime(createdAt() ?: 0) + idHex.substring(0, 8) // everyone else.
-            }
-
-        val mySignature =
-            LevelSignature(
-                signature = parentSignature + "/" + threadOrder + ";",
-                createdAt = createdAt(),
-                author = author,
-            )
-
-        cachedSignatures[this] = mySignature
-        return mySignature
-    }
-
-    fun replyLevel(cachedLevels: MutableMap<Note, Int> = mutableMapOf()): Int {
-        val replyTo = replyTo
-        if (
-            event is RepostEvent || event is GenericRepostEvent || replyTo == null || replyTo.isEmpty()
-        ) {
-            return 0
-        }
-
-        return replyTo.maxOf {
-            cachedLevels[it] ?: it.replyLevel(cachedLevels).apply { cachedLevels.put(it, this) }
-        } + 1
     }
 
     fun addReply(note: Note) {
@@ -1155,8 +1061,7 @@ object RelayBriefInfoCache {
     @Immutable
     data class RelayBriefInfo(
         val url: String,
-        val displayUrl: String =
-            url.trim().removePrefix("wss://").removePrefix("ws://").removeSuffix("/").intern(),
+        val displayUrl: String = RelayUrlFormatter.displayUrl(url).intern(),
         val favIcon: String = "https://$displayUrl/favicon.ico".intern(),
     )
 

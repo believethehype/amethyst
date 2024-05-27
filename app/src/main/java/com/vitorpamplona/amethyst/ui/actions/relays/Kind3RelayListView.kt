@@ -18,13 +18,12 @@
  * AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
  * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-package com.vitorpamplona.amethyst.ui.actions
+package com.vitorpamplona.amethyst.ui.actions.relays
 
 import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -45,18 +44,13 @@ import androidx.compose.material.icons.filled.SyncProblem
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -72,214 +66,77 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.vitorpamplona.amethyst.R
 import com.vitorpamplona.amethyst.model.RelayBriefInfoCache
 import com.vitorpamplona.amethyst.model.RelaySetupInfo
 import com.vitorpamplona.amethyst.service.Nip11CachedRetriever
 import com.vitorpamplona.amethyst.service.Nip11Retriever
 import com.vitorpamplona.amethyst.service.relays.Constants
-import com.vitorpamplona.amethyst.service.relays.Constants.defaultRelays
 import com.vitorpamplona.amethyst.service.relays.FeedType
+import com.vitorpamplona.amethyst.ui.actions.RelayInfoDialog
+import com.vitorpamplona.amethyst.ui.actions.RelayInformationDialog
 import com.vitorpamplona.amethyst.ui.note.RenderRelayIcon
 import com.vitorpamplona.amethyst.ui.screen.loggedIn.AccountViewModel
 import com.vitorpamplona.amethyst.ui.theme.ButtonBorder
 import com.vitorpamplona.amethyst.ui.theme.DividerThickness
 import com.vitorpamplona.amethyst.ui.theme.FeedPadding
-import com.vitorpamplona.amethyst.ui.theme.Font14SP
 import com.vitorpamplona.amethyst.ui.theme.HalfHorzPadding
 import com.vitorpamplona.amethyst.ui.theme.HalfStartPadding
 import com.vitorpamplona.amethyst.ui.theme.ReactionRowHeightChat
 import com.vitorpamplona.amethyst.ui.theme.Size30Modifier
 import com.vitorpamplona.amethyst.ui.theme.Size35dp
-import com.vitorpamplona.amethyst.ui.theme.StdHorzSpacer
 import com.vitorpamplona.amethyst.ui.theme.StdVertSpacer
 import com.vitorpamplona.amethyst.ui.theme.WarningColor
 import com.vitorpamplona.amethyst.ui.theme.allGoodColor
 import com.vitorpamplona.amethyst.ui.theme.largeRelayIconModifier
 import com.vitorpamplona.amethyst.ui.theme.placeholderText
 import com.vitorpamplona.amethyst.ui.theme.warningColor
+import com.vitorpamplona.quartz.encoders.RelayUrlFormatter
 import kotlinx.coroutines.launch
-import java.lang.Math.round
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NewRelayListView(
-    onClose: () -> Unit,
+fun Kind3RelayListView(
+    feedState: List<RelaySetupInfo>,
+    postViewModel: Kind3RelayListViewModel,
     accountViewModel: AccountViewModel,
-    relayToAdd: String = "",
+    onClose: () -> Unit,
     nav: (String) -> Unit,
+    relayToAdd: String,
 ) {
-    val postViewModel: NewRelayListViewModel = viewModel()
-    val feedState by postViewModel.relays.collectAsStateWithLifecycle()
-
-    LaunchedEffect(Unit) { postViewModel.load(accountViewModel.account) }
-
-    Dialog(
-        onDismissRequest = onClose,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
-    ) {
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Spacer(modifier = StdHorzSpacer)
-
-                            Button(
-                                onClick = {
-                                    postViewModel.deleteAll()
-                                    defaultRelays.forEach { postViewModel.addRelay(it) }
-                                    postViewModel.loadRelayDocuments()
-                                },
-                            ) {
-                                Text(stringResource(R.string.default_relays))
-                            }
-
-                            SaveButton(
-                                onPost = {
-                                    postViewModel.create()
-                                    onClose()
-                                },
-                                true,
-                            )
-                        }
-                    },
-                    navigationIcon = {
-                        Spacer(modifier = StdHorzSpacer)
-                        CloseButton(
-                            onPress = {
-                                postViewModel.clear()
-                                onClose()
-                            },
-                        )
-                    },
-                    colors =
-                        TopAppBarDefaults.topAppBarColors(
-                            containerColor = MaterialTheme.colorScheme.surface,
-                        ),
-                )
-            },
-        ) { pad ->
-            Column(
-                modifier =
-                    Modifier.padding(
-                        16.dp,
-                        pad.calculateTopPadding(),
-                        16.dp,
-                        pad.calculateBottomPadding(),
-                    ),
-                verticalArrangement = Arrangement.SpaceAround,
-            ) {
-                Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                    LazyColumn(
-                        contentPadding = FeedPadding,
-                    ) {
-                        itemsIndexed(feedState, key = { _, item -> item.url }) { index, item ->
-                            ServerConfig(
-                                item,
-                                onToggleDownload = { postViewModel.toggleDownload(it) },
-                                onToggleUpload = { postViewModel.toggleUpload(it) },
-                                onToggleFollows = { postViewModel.toggleFollows(it) },
-                                onTogglePrivateDMs = { postViewModel.toggleMessages(it) },
-                                onTogglePublicChats = { postViewModel.togglePublicChats(it) },
-                                onToggleGlobal = { postViewModel.toggleGlobal(it) },
-                                onToggleSearch = { postViewModel.toggleSearch(it) },
-                                onDelete = { postViewModel.deleteRelay(it) },
-                                accountViewModel = accountViewModel,
-                            ) {
-                                onClose()
-                                nav(it)
-                            }
-                        }
-                    }
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        LazyColumn(
+            contentPadding = FeedPadding,
+        ) {
+            itemsIndexed(feedState, key = { _, item -> item.url }) { index, item ->
+                LoadRelayInfo(
+                    item,
+                    onToggleDownload = { postViewModel.toggleDownload(it) },
+                    onToggleUpload = { postViewModel.toggleUpload(it) },
+                    onToggleFollows = { postViewModel.toggleFollows(it) },
+                    onTogglePrivateDMs = { postViewModel.toggleMessages(it) },
+                    onTogglePublicChats = { postViewModel.togglePublicChats(it) },
+                    onToggleGlobal = { postViewModel.toggleGlobal(it) },
+                    onToggleSearch = { postViewModel.toggleSearch(it) },
+                    onDelete = { postViewModel.deleteRelay(it) },
+                    accountViewModel = accountViewModel,
+                ) {
+                    onClose()
+                    nav(it)
                 }
+            }
 
+            item {
                 Spacer(modifier = StdVertSpacer)
-
-                EditableServerConfig(relayToAdd) { postViewModel.addRelay(it) }
+                Kind3RelayEditBox(relayToAdd) { postViewModel.addRelay(it) }
             }
         }
-    }
-}
-
-@Composable
-fun ServerConfigHeader() {
-    Column(Modifier.fillMaxWidth()) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = stringResource(R.string.relay_address),
-                        modifier = Modifier.weight(1f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-
-            Column(Modifier.weight(1.4f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Spacer(modifier = Modifier.size(30.dp))
-
-                    Text(
-                        text = stringResource(R.string.bytes),
-                        maxLines = 1,
-                        fontSize = Font14SP,
-                        modifier = Modifier.weight(1.2f),
-                        color = MaterialTheme.colorScheme.placeholderText,
-                    )
-
-                    Spacer(modifier = Modifier.size(5.dp))
-
-                    Text(
-                        text = stringResource(id = R.string.bytes),
-                        maxLines = 1,
-                        fontSize = Font14SP,
-                        modifier = Modifier.weight(1.2f),
-                        color = MaterialTheme.colorScheme.placeholderText,
-                    )
-
-                    Spacer(modifier = Modifier.size(5.dp))
-
-                    Text(
-                        text = stringResource(R.string.errors),
-                        maxLines = 1,
-                        fontSize = Font14SP,
-                        modifier = Modifier.weight(1f),
-                        color = MaterialTheme.colorScheme.placeholderText,
-                    )
-
-                    Spacer(modifier = Modifier.size(5.dp))
-
-                    Text(
-                        text = stringResource(R.string.spam),
-                        maxLines = 1,
-                        fontSize = Font14SP,
-                        modifier = Modifier.weight(1f),
-                        color = MaterialTheme.colorScheme.placeholderText,
-                    )
-
-                    Spacer(modifier = Modifier.size(2.dp))
-                }
-            }
-        }
-
-        HorizontalDivider(thickness = DividerThickness)
     }
 }
 
 @Preview
 @Composable
 fun ServerConfigPreview() {
-    ServerConfigClickableLine(
+    ClickableRelayItem(
         loadProfilePicture = true,
         item =
             RelaySetupInfo(
@@ -306,7 +163,7 @@ fun ServerConfigPreview() {
 }
 
 @Composable
-fun ServerConfig(
+fun LoadRelayInfo(
     item: RelaySetupInfo,
     onToggleDownload: (RelaySetupInfo) -> Unit,
     onToggleUpload: (RelaySetupInfo) -> Unit,
@@ -337,7 +194,7 @@ fun ServerConfig(
             accountViewModel.settings.showProfilePictures.value
         }
 
-    ServerConfigClickableLine(
+    ClickableRelayItem(
         item = item,
         loadProfilePicture = automaticallyShowProfilePicture,
         onToggleDownload = onToggleDownload,
@@ -351,7 +208,9 @@ fun ServerConfig(
         onClick = {
             accountViewModel.retrieveRelayDocument(
                 item.url,
-                onInfo = { relayInfo = RelayInfoDialog(RelayBriefInfoCache.RelayBriefInfo(item.url), it) },
+                onInfo = {
+                    relayInfo = RelayInfoDialog(RelayBriefInfoCache.RelayBriefInfo(item.url), it)
+                },
                 onError = { url, errorCode, exceptionMessage ->
                     val msg =
                         when (errorCode) {
@@ -361,18 +220,21 @@ fun ServerConfig(
                                     url,
                                     exceptionMessage,
                                 )
+
                             Nip11Retriever.ErrorCode.FAIL_TO_REACH_SERVER ->
                                 context.getString(
                                     R.string.relay_information_document_error_assemble_url,
                                     url,
                                     exceptionMessage,
                                 )
+
                             Nip11Retriever.ErrorCode.FAIL_TO_PARSE_RESULT ->
                                 context.getString(
                                     R.string.relay_information_document_error_assemble_url,
                                     url,
                                     exceptionMessage,
                                 )
+
                             Nip11Retriever.ErrorCode.FAIL_WITH_HTTP_STATUS ->
                                 context.getString(
                                     R.string.relay_information_document_error_assemble_url,
@@ -392,7 +254,7 @@ fun ServerConfig(
 }
 
 @Composable
-fun ServerConfigClickableLine(
+fun ClickableRelayItem(
     item: RelaySetupInfo,
     loadProfilePicture: Boolean,
     onToggleDownload: (RelaySetupInfo) -> Unit,
@@ -433,7 +295,7 @@ fun ServerConfigClickableLine(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = ReactionRowHeightChat.fillMaxWidth(),
                 ) {
-                    RenderActiveToggles(
+                    ActiveToggles(
                         item = item,
                         onToggleFollows = onToggleFollows,
                         onTogglePrivateDMs = onTogglePrivateDMs,
@@ -447,7 +309,7 @@ fun ServerConfigClickableLine(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = ReactionRowHeightChat.fillMaxWidth(),
                 ) {
-                    RenderStatusRow(
+                    StatusRow(
                         item = item,
                         onToggleDownload = onToggleDownload,
                         onToggleUpload = onToggleUpload,
@@ -463,7 +325,7 @@ fun ServerConfigClickableLine(
 
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
-private fun RenderStatusRow(
+private fun StatusRow(
     item: RelaySetupInfo,
     onToggleDownload: (RelaySetupInfo) -> Unit,
     onToggleUpload: (RelaySetupInfo) -> Unit,
@@ -615,7 +477,7 @@ private fun RenderStatusRow(
 
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
-private fun RenderActiveToggles(
+private fun ActiveToggles(
     item: RelaySetupInfo,
     onToggleFollows: (RelaySetupInfo) -> Unit,
     onTogglePrivateDMs: (RelaySetupInfo) -> Unit,
@@ -844,7 +706,7 @@ private fun FirstLine(
 }
 
 @Composable
-fun EditableServerConfig(
+fun Kind3RelayEditBox(
     relayToAdd: String,
     onNewRelay: (RelaySetupInfo) -> Unit,
 ) {
@@ -899,18 +761,15 @@ fun EditableServerConfig(
         Button(
             onClick = {
                 if (url.isNotBlank() && url != "/") {
-                    var addedWSS =
-                        if (!url.startsWith("wss://") && !url.startsWith("ws://")) {
-                            if (url.endsWith(".onion") || url.endsWith(".onion/")) {
-                                "ws://$url"
-                            } else {
-                                "wss://$url"
-                            }
-                        } else {
-                            url
-                        }
-                    if (url.endsWith("/")) addedWSS = addedWSS.dropLast(1)
-                    onNewRelay(RelaySetupInfo(addedWSS, read, write, feedTypes = FeedType.values().toSet()))
+                    val addedWSS = RelayUrlFormatter.normalize(url)
+                    onNewRelay(
+                        RelaySetupInfo(
+                            addedWSS,
+                            read,
+                            write,
+                            feedTypes = FeedType.values().toSet(),
+                        ),
+                    )
                     url = ""
                     write = true
                     read = true
@@ -930,22 +789,4 @@ fun EditableServerConfig(
             Text(text = stringResource(id = R.string.add), color = Color.White)
         }
     }
-}
-
-fun countToHumanReadableBytes(counter: Int) =
-    when {
-        counter >= 1000000000 -> "${round(counter / 1000000000f)} GB"
-        counter >= 1000000 -> "${round(counter / 1000000f)} MB"
-        counter >= 1000 -> "${round(counter / 1000f)} KB"
-        else -> "$counter"
-    }
-
-fun countToHumanReadable(
-    counter: Int,
-    str: String,
-) = when {
-    counter >= 1000000000 -> "${round(counter / 1000000000f)}G $str"
-    counter >= 1000000 -> "${round(counter / 1000000f)}M $str"
-    counter >= 1000 -> "${round(counter / 1000f)}K $str"
-    else -> "$counter $str"
 }

@@ -791,13 +791,20 @@ fun RenderContentDVMThumb(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = RowColSpacing,
             ) {
-                RecommendReaction(
+                LikeReaction(
                     baseNote = baseNote,
                     grayTint = MaterialTheme.colorScheme.onSurface,
                     accountViewModel = accountViewModel,
                     nav,
                 )
             }
+           /* Spacer(modifier = StdHorzSpacer)
+            RecommendReaction(
+                baseNote = baseNote,
+                grayTint = MaterialTheme.colorScheme.onSurface,
+                accountViewModel = accountViewModel,
+                nav = nav,
+            ) */
             Spacer(modifier = StdHorzSpacer)
             ZapReaction(
                 baseNote = baseNote,

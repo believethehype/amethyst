@@ -27,6 +27,7 @@ import com.vitorpamplona.amethyst.service.relays.EOSETime
 import com.vitorpamplona.amethyst.service.relays.EVENT_FINDER_TYPES
 import com.vitorpamplona.amethyst.service.relays.JsonFilter
 import com.vitorpamplona.amethyst.service.relays.TypedFilter
+import com.vitorpamplona.quartz.events.AppRecommendationEvent
 import com.vitorpamplona.quartz.events.CommunityPostApprovalEvent
 import com.vitorpamplona.quartz.events.DeletionEvent
 import com.vitorpamplona.quartz.events.GenericRepostEvent
@@ -76,6 +77,7 @@ object NostrSingleEventDataSource : NostrDataSource("SingleEventFeed") {
                                     PollNoteEvent.KIND,
                                     CommunityPostApprovalEvent.KIND,
                                     LiveActivitiesChatMessageEvent.KIND,
+                                    AppRecommendationEvent.KIND,
                                 ),
                             tags = mapOf("a" to it.mapNotNull { it.address()?.toTag() }),
                             since = findMinimumEOSEs(it),
@@ -179,7 +181,7 @@ object NostrSingleEventDataSource : NostrDataSource("SingleEventFeed") {
                             tags = mapOf("e" to it.map { it.idHex }),
                             since = findMinimumEOSEs(it),
                             // Max amount of "replies" to download on a specific event.
-                            limit = 10,
+                            limit = 50,
                         ),
                 ),
             )

@@ -51,6 +51,14 @@ class ParticipantListBuilder {
             }
         }
 
+        baseNote.recommendations.forEach { recommendation ->
+            recommendation.author?.let { author ->
+                if (author !in set && (followingSet == null || author.pubkeyHex in followingSet)) {
+                    set.add(author)
+                }
+            }
+        }
+
         baseNote.zaps.forEach { zapPair ->
             zapPair.key.author?.let { author ->
                 if (author !in set && (followingSet == null || author.pubkeyHex in followingSet)) {

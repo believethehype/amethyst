@@ -232,9 +232,17 @@ open class Note(val idHex: String) {
         }
     }
 
+    fun removeRecommendation(note: Note) {
+        if (note in recommendations) {
+            recommendations = recommendations - note
+            liveSet?.innerRecommendations?.invalidateData()
+        }
+    }
+
     fun removeAllChildNotes(): List<Note> {
         val repliesChanged = replies.isNotEmpty()
         val reactionsChanged = reactions.isNotEmpty()
+        val recommendationsChanged = recommendations.isNotEmpty()
         val zapsChanged = zaps.isNotEmpty() || zapPayments.isNotEmpty()
         val boostsChanged = boosts.isNotEmpty()
         val reportsChanged = reports.isNotEmpty()
@@ -252,6 +260,7 @@ open class Note(val idHex: String) {
 
         replies = listOf<Note>()
         reactions = mapOf<String, List<Note>>()
+        recommendations = listOf<Note>()
         boosts = listOf<Note>()
         reports = mapOf<User, List<Note>>()
         zaps = mapOf<Note, Note?>()
@@ -262,6 +271,7 @@ open class Note(val idHex: String) {
 
         if (repliesChanged) liveSet?.innerReplies?.invalidateData()
         if (reactionsChanged) liveSet?.innerReactions?.invalidateData()
+        if (recommendationsChanged) liveSet?.innerRecommendations?.invalidateData()
         if (boostsChanged) liveSet?.innerBoosts?.invalidateData()
         if (reportsChanged) liveSet?.innerReports?.invalidateData()
         if (zapsChanged) liveSet?.innerZaps?.invalidateData()
@@ -326,6 +336,13 @@ open class Note(val idHex: String) {
         if (note !in boosts) {
             boosts = boosts + note
             liveSet?.innerBoosts?.invalidateData()
+        }
+    }
+
+    fun addRecommendation(note: Note) {
+        if (note !in recommendations) {
+            recommendations = recommendations + note
+            liveSet?.innerRecommendations?.invalidateData()
         }
     }
 
@@ -551,6 +568,10 @@ open class Note(val idHex: String) {
         return boosts.any { it.author?.pubkeyHex == user.pubkeyHex }
     }
 
+    fun isRecommendedBy(user: User): Boolean {
+        return recommendations.any { it.author?.pubkeyHex == user.pubkeyHex }
+    }
+
     fun hasReportsBy(user: User): Boolean {
         return reports[user]?.isNotEmpty() ?: false
     }
@@ -705,11 +726,11 @@ open class Note(val idHex: String) {
         return zaps.any { it.key.author == loggedIn }
     }
 
-    fun hasRcommended(
+    fun hasRecommended(
         loggedIn: User,
         content: String,
     ): Boolean {
-        return reactedBy(loggedIn, content).isNotEmpty()
+        return isRecommendedBy(loggedIn)
     }
 
     fun hasReacted(
@@ -760,6 +781,12 @@ open class Note(val idHex: String) {
                 it.replyTo = it.replyTo?.updated(this, note)
             }
         }
+
+        recommendations.forEach {
+            note.addRecommendation(it)
+            it.replyTo = it.replyTo?.updated(this, note)
+        }
+
         boosts.forEach {
             note.addBoost(it)
             it.replyTo = it.replyTo?.updated(this, note)
@@ -779,6 +806,7 @@ open class Note(val idHex: String) {
         replyTo = null
         replies = emptyList()
         reactions = emptyMap()
+        recommendations = emptyList()
         boosts = emptyList()
         reports = emptyMap()
         zaps = emptyMap()
@@ -948,6 +976,8 @@ class NoteLiveSet(u: Note) {
 
     val boostCount = innerBoosts.map { it.note.boosts.size }.distinctUntilChanged()
 
+    val recommendationCount = innerRecommendations.map { it.note.recommendations.size }.distinctUntilChanged()
+
     val relayInfo = innerRelays.map { it.note.relays }
 
     val content = innerMetadata.map { it.note.event?.content() ?: "" }
@@ -965,6 +995,7 @@ class NoteLiveSet(u: Note) {
             hasReactions.hasObservers() ||
             replyCount.hasObservers() ||
             reactionCount.hasObservers() ||
+            recommendationCount.hasObservers() ||
             boostCount.hasObservers() ||
             innerOts.hasObservers() ||
             innerModifications.hasObservers()

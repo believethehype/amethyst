@@ -737,11 +737,15 @@ object LocalCache {
             is RepostEvent ->
                 event.boostedPost().mapNotNull { checkGetOrCreateNote(it) } +
                     event.taggedAddresses().map { getOrCreateAddressableNote(it) }
+
             is GenericRepostEvent ->
                 event.boostedPost().mapNotNull { checkGetOrCreateNote(it) } +
                     event.taggedAddresses().map { getOrCreateAddressableNote(it) }
             is CommunityPostApprovalEvent -> event.approvedEvents().mapNotNull { checkGetOrCreateNote(it) }
             is ReactionEvent ->
+                event.originalPost().mapNotNull { checkGetOrCreateNote(it) } +
+                    event.taggedAddresses().map { getOrCreateAddressableNote(it) }
+            is AppRecommendationEvent ->
                 event.originalPost().mapNotNull { checkGetOrCreateNote(it) } +
                     event.taggedAddresses().map { getOrCreateAddressableNote(it) }
             is ReportEvent ->
@@ -1061,7 +1065,28 @@ object LocalCache {
         event: AppRecommendationEvent,
         relay: Relay?,
     ) {
-        consumeBaseReplaceable(event, relay)
+        val note = getOrCreateNote(event.id)
+
+        // Already processed this event.
+        if (note.event != null) return
+
+        // Log.d("TN", "New Boost (${notes.size},${users.size}) ${note.author?.toBestDisplayName()}
+        // ${formattedDateTime(event.createdAt)}")
+
+        val author = getOrCreateUser(event.pubKey)
+        val repliesTo = computeReplyTo(event)
+
+        note.loadEvent(event, author, repliesTo)
+
+        // Log.d("RE", "New Reaction ${event.content} (${notes.size},${users.size})
+        // ${note.author?.toBestDisplayName()} ${formattedDateTime(event.createdAt)}")
+
+        repliesTo.forEach {
+            it.addRecommendation(note)
+            println("RECOMMENDATION: " + note.event?.id())
+        }
+
+        refreshObservers(note)
     }
 
     private fun consume(
@@ -1226,6 +1251,7 @@ object LocalCache {
         // Counts the replies
         deleteNote.replyTo?.forEach { masterNote ->
             masterNote.removeReply(deleteNote)
+            masterNote.removeRecommendation(deleteNote)
             masterNote.removeBoost(deleteNote)
             masterNote.removeReaction(deleteNote)
             masterNote.removeZap(deleteNote)
@@ -2168,6 +2194,7 @@ object LocalCache {
     private fun removeFromCache(note: Note) {
         note.replyTo?.forEach { masterNote ->
             masterNote.removeReply(note)
+            masterNote.removeRecommendation(note)
             masterNote.removeBoost(note)
             masterNote.removeReaction(note)
             masterNote.removeZap(note)

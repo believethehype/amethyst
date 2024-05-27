@@ -172,13 +172,13 @@ fun LikeIcon(
 
 @Composable
 fun RecommendIcon(
-    iconSizeModifier: Modifier,
+    modifier: Modifier,
     grayTint: Color,
 ) {
     Icon(
         painter = painterResource(R.drawable.ic_trends),
         contentDescription = stringResource(id = R.string.like_description),
-        modifier = iconSizeModifier,
+        modifier = modifier,
         tint = grayTint,
     )
 }

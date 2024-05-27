@@ -658,10 +658,10 @@ class Account(
     suspend fun recommend(note: Note) {
         if (!isWriteable()) return
 
-       /* if (hasReacted(note, reaction)) {
-            // has already liked this note
+        if (hasRecommended(note)) {
+            // has already recommended this note
             return
-        } */
+        }
 
         var tags: Array<Array<String>> = arrayOf()
         if (note.event is AppDefinitionEvent) {

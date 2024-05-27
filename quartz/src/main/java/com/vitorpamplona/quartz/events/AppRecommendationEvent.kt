@@ -37,6 +37,9 @@ class AppRecommendationEvent(
 ) : BaseAddressableEvent(id, pubKey, createdAt, KIND, tags, content, sig) {
     fun recommendations() = tags.filter { it.size > 1 && it[0] == "a" }.mapNotNull { ATag.parse(it[1], it.getOrNull(2)) }
 
+    fun originalPost() = tags.filter { it.size > 1 && it[0] == "a" }.mapNotNull { it.getOrNull(1) }
+    //  fun originalPost() = tags.filter { it.size > 1 && it[0] == "e" }.map { it[1] }
+
     companion object {
         const val KIND = 31989
         const val ALT = "App recommendations by the author"

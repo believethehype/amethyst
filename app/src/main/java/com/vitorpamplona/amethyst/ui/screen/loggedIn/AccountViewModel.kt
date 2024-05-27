@@ -230,7 +230,7 @@ class AccountViewModel(val account: Account, val settings: SettingsState) : View
     fun recommendtoOrDelete(note: Note) {
         viewModelScope.launch(Dispatchers.IO) {
             if (hasRecommended(note)) {
-                deleteRecommendation(note) // TODO implement
+                deleteRecommendation(note)
             } else {
                 recommendApp(note)
             }

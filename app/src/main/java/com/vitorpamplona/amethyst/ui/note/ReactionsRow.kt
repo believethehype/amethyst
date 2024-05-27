@@ -20,6 +20,7 @@
  */
 package com.vitorpamplona.amethyst.ui.note
 
+import android.annotation.SuppressLint
 import android.content.Context
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedContentTransitionScope
@@ -107,6 +108,7 @@ import com.vitorpamplona.amethyst.ui.components.InLineIconRenderer
 import com.vitorpamplona.amethyst.ui.navigation.routeToMessage
 import com.vitorpamplona.amethyst.ui.note.types.EditState
 import com.vitorpamplona.amethyst.ui.screen.loggedIn.AccountViewModel
+import com.vitorpamplona.amethyst.ui.theme.BitcoinOrange
 import com.vitorpamplona.amethyst.ui.theme.ButtonBorder
 import com.vitorpamplona.amethyst.ui.theme.DarkerGreen
 import com.vitorpamplona.amethyst.ui.theme.Font14SP
@@ -837,6 +839,7 @@ fun LikeReaction(
     ObserveLikeText(baseNote) { reactionCount -> SlidingAnimationCount(reactionCount, grayTint) }
 }
 
+@SuppressLint("UnusedCrossfadeTargetStateParameter")
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun RecommendReaction(
@@ -845,12 +848,9 @@ fun RecommendReaction(
     accountViewModel: AccountViewModel,
     nav: (String) -> Unit,
     iconSize: Dp = Size20dp,
-    heartSizeModifier: Modifier = Size16Modifier,
+    SizeModifier: Modifier = Size16Modifier,
     iconFontSize: TextUnit = Font14SP,
 ) {
-    var wantsToChangeReactionSymbol by remember { mutableStateOf(false) }
-    var wantsToReact by remember { mutableStateOf(false) }
-
     Box(
         contentAlignment = Center,
         modifier =
@@ -872,34 +872,15 @@ fun RecommendReaction(
         ObserveReommendIcon(baseNote, accountViewModel) { reactionType ->
             Crossfade(targetState = reactionType, label = "RecommendIcon") {
                 if (it != null) {
-                    RenderReactionType(it, heartSizeModifier, iconFontSize)
+                    RecommendIcon(SizeModifier, BitcoinOrange)
                 } else {
-                    RecommendIcon(heartSizeModifier, grayTint)
+                    RecommendIcon(SizeModifier, grayTint)
                 }
             }
         }
     }
 
-    ObserveLikeText(baseNote) { reactionCount -> SlidingAnimationCount(reactionCount, grayTint) }
-}
-
-@Composable
-fun ObserveRecommedIcon(
-    baseNote: Note,
-    accountViewModel: AccountViewModel,
-    inner: @Composable (String?) -> Unit,
-) {
-    val reactionsState by baseNote.live().recommendations.observeAsState()
-
-    val reactionType by
-        produceState(initialValue = null as String?, key1 = reactionsState) {
-            val newReactionType = accountViewModel.loadReactionTo(reactionsState?.note)
-            if (value != newReactionType) {
-                value = newReactionType
-            }
-        }
-
-    inner(reactionType)
+    ObserveRecommendationText(baseNote) { recommendationCount -> SlidingAnimationCount(recommendationCount, grayTint) }
 }
 
 @Composable
@@ -932,9 +913,7 @@ fun ObserveReommendIcon(
     val reactionType by
         produceState(initialValue = null as String?, key1 = recommendationState) {
             val newReactionType = accountViewModel.loadRecommendationTo(recommendationState?.note)
-            if (value != newReactionType) {
-                value = newReactionType
-            }
+            value = newReactionType
         }
 
     inner(reactionType)
@@ -979,6 +958,16 @@ fun ObserveLikeText(
     inner(reactionCount)
 }
 
+@Composable
+fun ObserveRecommendationText(
+    baseNote: Note,
+    inner: @Composable (Int) -> Unit,
+) {
+    val recommendationCount by baseNote.live().recommendationCount.observeAsState(0)
+
+    inner(recommendationCount)
+}
+
 private fun likeClick(
     accountViewModel: AccountViewModel,
     baseNote: Note,
@@ -1021,12 +1010,7 @@ private fun recommendClick(
         )
         return
     }
-    if (accountViewModel.account.reactionChoices.isEmpty()) {
-        accountViewModel.toast(
-            R.string.no_reactions_setup,
-            R.string.no_reaction_type_setup_long_press_to_change,
-        )
-    } else if (!accountViewModel.isWriteable()) {
+    if (!accountViewModel.isWriteable()) {
         accountViewModel.toast(
             R.string.read_only_user,
             R.string.login_with_a_private_key_to_like_posts,

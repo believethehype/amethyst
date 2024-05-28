@@ -82,7 +82,7 @@ open class DiscoverNIP89FeedFilter(
     }
 
     override fun sort(collection: Set<Note>): List<Note> {
-        // return collection.sortedWith(compareBy<Note> { it.recommendations.size }.thenBy { it.reactions.size + it.zaps.size }).reversed()
-        return collection.sortedWith(compareBy({ it.createdAt() }, { it.idHex })).reversed()
+        return collection.sortedWith(compareBy<Note> { it.recommendations.size }.thenBy { it.createdAt() }.thenBy { it.reactions.size + it.zaps.size }).reversed()
+        // return collection.sortedWith(compareBy({ it.createdAt() }, { it.idHex })).reversed()
     }
 }

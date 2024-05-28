@@ -70,7 +70,7 @@ class NIP90ContentDiscoveryResponseEvent(
         fun create(
             signer: NostrSigner,
             createdAt: Long = TimeUtils.now(),
-            onReady: (AppRecommendationEvent) -> Unit,
+            onReady: (NIP90ContentDiscoveryResponseEvent) -> Unit,
         ) {
             val tags =
                 arrayOf(

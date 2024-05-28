@@ -798,13 +798,13 @@ fun RenderContentDVMThumb(
                     nav,
                 )
             }
-           /* Spacer(modifier = StdHorzSpacer)
+            Spacer(modifier = StdHorzSpacer)
             RecommendReaction(
                 baseNote = baseNote,
                 grayTint = MaterialTheme.colorScheme.onSurface,
                 accountViewModel = accountViewModel,
                 nav = nav,
-            ) */
+            )
             Spacer(modifier = StdHorzSpacer)
             ZapReaction(
                 baseNote = baseNote,

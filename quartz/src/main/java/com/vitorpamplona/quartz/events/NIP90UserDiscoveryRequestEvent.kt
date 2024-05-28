@@ -41,7 +41,7 @@ class NIP90UserDiscoveryRequestEvent(
         fun create(
             signer: NostrSigner,
             createdAt: Long = TimeUtils.now(),
-            onReady: (AppRecommendationEvent) -> Unit,
+            onReady: (AppDefinitionEvent) -> Unit,
         ) {
             val tags =
                 arrayOf(

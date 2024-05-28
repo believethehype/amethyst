@@ -74,6 +74,7 @@ import com.vitorpamplona.quartz.encoders.HexKey
 import com.vitorpamplona.quartz.encoders.Nip11RelayInformation
 import com.vitorpamplona.quartz.encoders.Nip19Bech32
 import com.vitorpamplona.quartz.events.AddressableEvent
+import com.vitorpamplona.quartz.events.AppDefinitionEvent
 import com.vitorpamplona.quartz.events.ChatroomKey
 import com.vitorpamplona.quartz.events.ChatroomKeyable
 import com.vitorpamplona.quartz.events.DraftEvent
@@ -232,7 +233,17 @@ class AccountViewModel(val account: Account, val settings: SettingsState) : View
             if (hasRecommended(note)) {
                 deleteRecommendation(note)
             } else {
+                var dvmAnnouncements =
+                    LocalCache.addressables.filterIntoSet { _, it ->
+                        it.event is AddressableEvent && (it.event is AppDefinitionEvent) && (it.event as AppDefinitionEvent).supportedKinds().contains(5300)
+                    }
+                println(dvmAnnouncements)
+                for (dvm in dvmAnnouncements) {
+                    deleteRecommendation(dvm)
+                }
+
                 recommendApp(note)
+                // TODO trigger autorefresh?, for now needs a pull down
             }
         }
     }

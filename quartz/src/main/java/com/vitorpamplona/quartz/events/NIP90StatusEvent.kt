@@ -74,7 +74,7 @@ class NIP90StatusEvent(
         fun create(
             signer: NostrSigner,
             createdAt: Long = TimeUtils.now(),
-            onReady: (AppRecommendationEvent) -> Unit,
+            onReady: (NIP90StatusEvent) -> Unit,
         ) {
             val tags =
                 arrayOf(

@@ -107,7 +107,7 @@ open class NewPostViewModel : ViewModel() {
         mutableStateOf<List<Pair<FileStorageEvent, FileStorageHeaderEvent>>>(emptyList())
 
     var message by mutableStateOf(TextFieldValue(""))
-    var urlPreview by mutableStateOf<String?>(null)
+    var urlPreview by mutableStateOf<List<String>>(listOf())
     var isUploadingImage by mutableStateOf(false)
     val imageUploadingError =
         MutableSharedFlow<String?>(0, 3, onBufferOverflow = BufferOverflow.DROP_OLDEST)
@@ -243,7 +243,7 @@ open class NewPostViewModel : ViewModel() {
 
             quote?.let {
                 message = TextFieldValue(message.text + "\nnostr:${it.toNEvent()}")
-                urlPreview = findUrlInMessage()
+                urlPreview = findUrlsInMessage()
 
                 it.author?.let { quotedUser ->
                     if (quotedUser.pubkeyHex != accountViewModel.userProfile().pubkeyHex) {
@@ -262,7 +262,7 @@ open class NewPostViewModel : ViewModel() {
 
             fork?.let {
                 message = TextFieldValue(version?.event?.content() ?: it.event?.content() ?: "")
-                urlPreview = findUrlInMessage()
+                urlPreview = findUrlsInMessage()
 
                 it.event?.isSensitive()?.let {
                     if (it) wantsToMarkAsSensitive = true
@@ -470,7 +470,7 @@ open class NewPostViewModel : ViewModel() {
                 )
         }
 
-        urlPreview = findUrlInMessage()
+        urlPreview = findUrlsInMessage()
     }
 
     fun sendPost(relayList: List<RelaySetupInfo>? = null) {
@@ -841,7 +841,7 @@ open class NewPostViewModel : ViewModel() {
         forkedFromNote = null
 
         contentToAddUrl = null
-        urlPreview = null
+        urlPreview = listOf()
         isUploadingImage = false
         pTags = null
 
@@ -889,6 +889,8 @@ open class NewPostViewModel : ViewModel() {
 
     open fun findUrlInMessage(): String? = RichTextParser().parseValidUrls(message.text).firstOrNull()
 
+    open fun findUrlsInMessage(): List<String> = RichTextParser().parseValidUrls(message.text).toList()
+
     open fun removeFromReplyList(userToRemove: User) {
         pTags = pTags?.filter { it != userToRemove }
     }
@@ -899,7 +901,7 @@ open class NewPostViewModel : ViewModel() {
 
     open fun updateMessage(it: TextFieldValue) {
         message = it
-        urlPreview = findUrlInMessage()
+        urlPreview = findUrlsInMessage()
 
         if (it.selection.collapsed) {
             val lastWord =
@@ -1106,7 +1108,7 @@ open class NewPostViewModel : ViewModel() {
                     nip94attachments = nip94attachments.filter { it.url() != event.url() } + event
 
                     message = message.insertUrlAtCursor(imageUrl)
-                    urlPreview = findUrlInMessage()
+                    urlPreview = findUrlsInMessage()
                     saveDraft()
                 }
             },
@@ -1151,7 +1153,7 @@ open class NewPostViewModel : ViewModel() {
                             message = message.insertUrlAtCursor("nostr:" + it.toNEvent())
                         }
 
-                        urlPreview = findUrlInMessage()
+                        urlPreview = findUrlsInMessage()
                         saveDraft()
                     }
                 },

@@ -412,8 +412,7 @@ fun NewPostView(
                                     }
                                 }
 
-                                val myUrlPreview = postViewModel.urlPreview
-                                if (myUrlPreview != null) {
+                                for (myUrlPreview in postViewModel.urlPreview) {
                                     Row(modifier = Modifier.padding(vertical = Size5dp, horizontal = Size10dp)) {
                                         if (RichTextParser.isValidURL(myUrlPreview)) {
                                             if (RichTextParser.isImageUrl(myUrlPreview)) {

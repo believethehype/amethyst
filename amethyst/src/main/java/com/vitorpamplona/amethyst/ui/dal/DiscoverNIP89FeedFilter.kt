@@ -74,8 +74,7 @@ open class DiscoverNIP89FeedFilter(
 
     fun acceptDVM(noteEvent: AppDefinitionEvent): Boolean {
         val filterParams = buildFilterParams(account)
-        return noteEvent.appMetaData()?.subscription != true &&
-            filterParams.match(noteEvent) &&
+        return filterParams.match(noteEvent) &&
             noteEvent.includeKind("5300") &&
             noteEvent.createdAt > TimeUtils.now() - lastAnnounced // && params.match(noteEvent)
     }

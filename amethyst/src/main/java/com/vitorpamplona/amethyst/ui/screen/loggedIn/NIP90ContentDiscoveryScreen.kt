@@ -397,6 +397,10 @@ fun FeedDVM(
                     }
                 }
             }
+        } else if (status.code == "subscription-required") {
+            currentStatus = status.description
+        } else if (status.code == "subscription-active") {
+            currentStatus = status.description
         } else if (status.code == "processing") {
             currentStatus = status.description
         } else if (status.code == "error") {

@@ -398,8 +398,15 @@ fun FeedDVM(
                 }
             }
         } else if (status.code == "subscription-required") {
+            // TODO fetch 37001 tier events from author = DVM pubkey
+            // TODO Show description and perks for each Tier
+            // TODO add UI Elements to manage subscription to tier
+            // This includes per Tier subscribe button and possibility to add a new NWC string (ideally not main one)
+
             currentStatus = status.description
         } else if (status.code == "subscription-active") {
+            // TODO add possibility to unsubscribe from tier (Kind 7002)
+            // TODO add posibility to resubscribe if unsubscribed
             currentStatus = status.description
         } else if (status.code == "processing") {
             currentStatus = status.description

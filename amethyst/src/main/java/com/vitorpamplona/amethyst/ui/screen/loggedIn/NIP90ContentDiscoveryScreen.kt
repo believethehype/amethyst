@@ -401,6 +401,7 @@ fun FeedDVM(
             // TODO fetch 37001 tier events from author = DVM pubkey
             // TODO Show description and perks for each Tier
             // TODO add UI Elements to manage subscription to tier
+            //  create kind 7001 subscription event
             // This includes per Tier subscribe button and possibility to add a new NWC string (ideally not main one)
 
             currentStatus = status.description

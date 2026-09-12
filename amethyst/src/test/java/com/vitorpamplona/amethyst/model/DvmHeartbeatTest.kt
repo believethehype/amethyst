@@ -22,6 +22,7 @@ package com.vitorpamplona.amethyst.model
 
 import com.vitorpamplona.quartz.nip01Core.core.Address
 import com.vitorpamplona.quartz.nip89AppHandlers.definition.AppDefinitionEvent
+import com.vitorpamplona.quartz.nip90Dvms.contentDiscoveryRequest.NIP90ContentDiscoveryRequestEvent
 import com.vitorpamplona.quartz.nip90Dvms.dvmHeartbeat.DvmHeartbeatEvent
 import com.vitorpamplona.quartz.utils.TimeUtils
 import org.junit.Assert.assertEquals
@@ -134,10 +135,42 @@ class DvmHeartbeatTest {
     }
 
     @Test
+    fun pendingDvmRequestsSurviveNavigationInTheCache() {
+        // Leaving and re-opening the detail screen destroys the previous-ids composable state;
+        // the pending request ids must be recoverable from the cache (a still-processing DVM
+        // often dedupes the re-request, so the reply lands for the original request id).
+        val myPubKey = "ab".repeat(32)
+        val dvmA = "ea".repeat(32)
+        val dvmB = "eb".repeat(32)
+
+        fun request(
+            dvmPubKey: String,
+            id: String,
+            createdAt: Long,
+        ) = NIP90ContentDiscoveryRequestEvent(
+            id = id,
+            pubKey = myPubKey,
+            createdAt = createdAt,
+            tags = arrayOf(arrayOf("p", dvmPubKey), arrayOf("relays", "wss://relay.example/")),
+            content = "",
+            sig = "dd".repeat(64),
+        )
+
+        LocalCache.justConsume(request(dvmA, "d1".repeat(32), 1_760_000_100L), null, true)
+        LocalCache.justConsume(request(dvmA, "d2".repeat(32), 1_760_000_200L), null, true)
+        LocalCache.justConsume(request(dvmB, "d3".repeat(32), 1_760_000_300L), null, true)
+
+        val ids = LocalCache.recentDvmRequestIdsFor(myPubKey, dvmA)
+
+        assertEquals("newest first", listOf("d2".repeat(32), "d1".repeat(32)), ids)
+        assertEquals("capped", 2, ids.size)
+
+        assertTrue("no cross-DVM ids", LocalCache.recentDvmRequestIdsFor(myPubKey, "ec".repeat(32)).isEmpty())
+        assertTrue("no other requester's ids", LocalCache.recentDvmRequestIdsFor("ac".repeat(32), dvmA).isEmpty())
+    }
+
+    @Test
     fun theUngatedAnnouncementScanKeepsDvmsTheGateWouldHide() {
-        // The outbox fetcher must source announcements from the cache, NOT from the gated feed
-        // list: a DVM dropped for a stale beat must keep receiving outbox beats or it can never
-        // come back. Subscription apps and non-content-discovery apps stay excluded.
         val alive = appDef("scan-dvm")
         val subscriptionApp =
             AppDefinitionEvent(

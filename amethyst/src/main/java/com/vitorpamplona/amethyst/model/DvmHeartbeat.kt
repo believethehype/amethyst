@@ -22,6 +22,8 @@ package com.vitorpamplona.amethyst.model
 
 import com.vitorpamplona.amethyst.commons.model.cache.filterIntoSet
 import com.vitorpamplona.quartz.nip01Core.core.Address
+import com.vitorpamplona.quartz.nip01Core.core.HexKey
+import com.vitorpamplona.quartz.nip01Core.relay.filters.Filter
 import com.vitorpamplona.quartz.nip89AppHandlers.definition.AppDefinitionEvent
 import com.vitorpamplona.quartz.nip90Dvms.contentDiscoveryRequest.NIP90ContentDiscoveryRequestEvent
 import com.vitorpamplona.quartz.nip90Dvms.dvmHeartbeat.DvmHeartbeatEvent
@@ -42,6 +44,29 @@ fun LocalCache.hasFreshDvmHeartbeat(
     DvmHeartbeatRegistry
         .latestAt(Address(DvmHeartbeatEvent.KIND, appDef.pubKey, appDef.dTag()))
         ?.let { it >= now - DvmHeartbeatEvent.MAX_AGE_SECONDS } == true
+
+/**
+ * The requester's recent pending kind-5300 requests for one DVM (newest first), recovered from the
+ * cache. Leaving and re-opening the DVM detail screen destroys the previous-ids composable state,
+ * and a still-processing DVM often dedupes the re-request — so the reply lands for the ORIGINAL
+ * request id, which must be watched even after navigation.
+ */
+fun LocalCache.recentDvmRequestIdsFor(
+    requester: HexKey,
+    dvmPubKey: HexKey,
+    limit: Int = 3,
+): List<HexKey> =
+    filter(
+        Filter(
+            kinds = listOf(NIP90ContentDiscoveryRequestEvent.KIND),
+            authors = listOf(requester),
+            tags = mapOf("p" to listOf(dvmPubKey)),
+        ),
+    ).mapNotNull { note -> note.event as? NIP90ContentDiscoveryRequestEvent }
+        .filter { it.dvmPubKey() == dvmPubKey }
+        .sortedByDescending { it.createdAt }
+        .take(limit)
+        .map { it.id }
 
 /**
  * Every cached content-discovery announcement, WITHOUT the freshness gate — this is the source the

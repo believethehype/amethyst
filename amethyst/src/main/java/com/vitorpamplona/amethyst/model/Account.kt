@@ -3361,10 +3361,18 @@ class Account(
         val request = signer.sign<NIP90ContentDiscoveryRequestEvent>(NIP90ContentDiscoveryRequestEvent.build(dvmPublicKey.pubkeyHex, signer.pubKey, relays))
 
         val relayList =
-            dvmPublicKey.inboxRelays()?.toSet()?.ifEmpty { null }
+            (
+                dvmPublicKey.inboxRelays()?.toSet().orEmpty() +
+                    dvmPublicKey.outboxRelays()?.toSet().orEmpty()
+            ).ifEmpty { null }
                 ?: (dvmPublicKey.allUsedRelays() + cache.relayHints.hintsForKey(dvmPublicKey.pubkeyHex))
 
         cache.justConsumeMyOwnEvent(request)
+        // Reply watchers derive their REQ relays from the note's relay list (author inbox + note
+        // relays). The request is consumed with a null relay (our own send), so without this the
+        // watchers may have nowhere to listen for the DVM's 6300/7000 replies until a relay
+        // echoes our publish back — which some relays never do.
+        relayList.forEach { cache.getOrCreateNote(request).addRelay(it) }
         onReady(request, relayList.toSet())
         delay(100)
         client.publish(request, relayList)

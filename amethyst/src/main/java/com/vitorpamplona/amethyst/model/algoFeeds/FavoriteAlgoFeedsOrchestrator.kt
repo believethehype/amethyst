@@ -57,6 +57,9 @@ private const val RESPONSE_TIMEOUT_MS = 20_000L
  */
 data class FavoriteAlgoFeedsSnapshot(
     val requestId: HexKey? = null,
+    /** Request ids of recent re-requests, still worth observing: a slow DVM's reply can land for
+     *  an attempt that was already re-requested, and DVMs often dedupe repeats. */
+    val previousRequestIds: Set<HexKey> = emptySet(),
     val responseRelays: Set<NormalizedRelayUrl> = emptySet(),
     val ids: Set<HexKey> = emptySet(),
     val addresses: Set<String> = emptySet(),
@@ -118,13 +121,22 @@ class FavoriteAlgoFeedsOrchestrator(
         feedAddress: Address,
         seed: MutableStateFlow<FavoriteAlgoFeedsSnapshot>,
     ) {
-        val user = account.cache.checkGetOrCreateUser(feedAddress.pubKeyHex) ?: return
+        val user =
+            account.cache.checkGetOrCreateUser(feedAddress.pubKeyHex)
+                ?: run {
+                    seed.update { it.copy(errorMessage = "user-not-found") }
+                    return
+                }
         val job =
             scope.launch(Dispatchers.IO) {
                 try {
                     account.requestDVMContentDiscovery(user) { request, relays ->
                         seed.update {
                             it.copy(
+                                previousRequestIds =
+                                    (it.previousRequestIds + listOfNotNull(it.requestId)).toSet().let { ids ->
+                                        if (ids.size > 3) ids.drop(ids.size - 3).toSet() else ids
+                                    },
                                 requestId = request.id,
                                 responseRelays = relays,
                                 ids = emptySet(),
@@ -142,7 +154,11 @@ class FavoriteAlgoFeedsOrchestrator(
                             .observeLatestEvent<NIP90ContentDiscoveryResponseEvent>(
                                 Filter(
                                     kinds = listOf(NIP90ContentDiscoveryResponseEvent.KIND),
-                                    tags = mapOf("e" to listOf(requestId)),
+                                    // A slow DVM's reply can land for an attempt that was already
+                                    // re-requested (and DVMs often dedupe repeats) — watch the
+                                    // previous request ids too or the reply is dropped and the
+                                    // feed loops in timeout.
+                                    tags = mapOf("e" to (listOf(requestId) + seed.value.previousRequestIds)),
                                     limit = 1,
                                 ),
                             ).collectLatest { response ->
@@ -162,7 +178,9 @@ class FavoriteAlgoFeedsOrchestrator(
                             .observeLatestEvent<NIP90StatusEvent>(
                                 Filter(
                                     kinds = listOf(NIP90StatusEvent.KIND),
-                                    tags = mapOf("e" to listOf(requestId)),
+                                    // Same previous-ids watch as the response child: feedback for
+                                    // a re-requested attempt must still reach the banner.
+                                    tags = mapOf("e" to (listOf(requestId) + seed.value.previousRequestIds)),
                                     limit = 1,
                                 ),
                             ).collectLatest { status ->
@@ -187,7 +205,19 @@ class FavoriteAlgoFeedsOrchestrator(
                         }
                     }
                 } catch (e: Exception) {
-                    if (e is CancellationException) throw e
+                    if (e is CancellationException) {
+                        // A canceled attempt must never leave the seed in an eternal "requesting"
+                        // state (dead observers + dead timeout child = a banner nobody can escape):
+                        // mark it so the banner shows Retry.
+                        seed.update { current ->
+                            if (current.ids.isEmpty() && current.addresses.isEmpty() && current.latestStatus == null && current.errorMessage == null) {
+                                current.copy(errorMessage = "canceled")
+                            } else {
+                                current
+                            }
+                        }
+                        throw e
+                    }
                     Log.w("FavoriteAlgoFeedsOrchestrator", "Failed to start DVM request: ${e.message}", e)
                     seed.update { it.copy(errorMessage = e.message ?: "Unknown error") }
                 }

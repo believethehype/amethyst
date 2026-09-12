@@ -26,14 +26,18 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Alignment.Companion.BottomStart
@@ -90,6 +94,8 @@ import com.vitorpamplona.quartz.nip89AppHandlers.definition.AppDefinitionEvent
 import com.vitorpamplona.quartz.nip89AppHandlers.definition.AppMetadata
 import com.vitorpamplona.quartz.nip90Dvms.contentDiscoveryResponse.NIP90ContentDiscoveryResponseEvent
 import com.vitorpamplona.quartz.nip90Dvms.status.NIP90StatusEvent
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 
 @Composable
 fun DvmContentDiscoveryScreen(
@@ -140,16 +146,24 @@ fun DvmContentDiscoveryScreen(
         }
     var previousRequestIds by remember(appDefinition) { mutableStateOf<List<String>>(emptyList()) }
 
-    val onRefresh = {
-        accountViewModel.requestDVMContentDiscovery(noteAuthor) { newRequest ->
-            // A slow DVM's reply can land for the previous request — keep observing it.
-            previousRequestIds = (previousRequestIds + listOfNotNull(requestEventID?.idHex)).takeLast(3)
-            requestEventID = newRequest
-        }
+    val requestScope = rememberCoroutineScope()
+    var requestJob by remember(appDefinition) { mutableStateOf<Job?>(null) }
+    val onRefresh: () -> Unit = {
+        requestJob?.cancel()
+        requestJob =
+            requestScope.launch {
+                accountViewModel.reportSignerErrors {
+                    val newRequest = accountViewModel.requestDVMContentDiscovery(noteAuthor)
+                    // A slow DVM's reply can land for the previous request — keep observing it.
+                    previousRequestIds = (previousRequestIds + listOfNotNull(requestEventID?.idHex)).distinct().takeLast(3)
+                    requestEventID = newRequest
+                }
+            }
     }
 
     LaunchedEffect(key1 = appDefinition) {
         val existingResult = accountViewModel.cachedDVMContentDiscovery(noteAuthor.pubkeyHex)
+        if (requestJob != null) return@LaunchedEffect
         if (existingResult == null) {
             onRefresh()
         } else {
@@ -161,14 +175,16 @@ fun DvmContentDiscoveryScreen(
         Box(modifier = Modifier.fillMaxSize()) {
             val myRequestEventID = requestEventID
             if (myRequestEventID != null) {
-                ObserverContentDiscoveryResponse(
-                    appDefinition,
-                    myRequestEventID,
-                    previousRequestIds,
-                    onRefresh,
-                    accountViewModel,
-                    nav,
-                )
+                key(myRequestEventID) {
+                    ObserverContentDiscoveryResponse(
+                        appDefinition,
+                        myRequestEventID,
+                        previousRequestIds,
+                        onRefresh,
+                        accountViewModel,
+                        nav,
+                    )
+                }
             } else {
                 // TODO: Make a good splash screen with loading animation for this DVM.
                 FeedEmptyWithStatus(appDefinition, stringRes(Res.string.dvm_requesting_job), accountViewModel, nav)
@@ -191,17 +207,25 @@ fun ObserverContentDiscoveryResponse(
 ) {
     val noteAuthor = appDefinition.author ?: return
 
-    EventFinderFilterAssemblerSubscription(dvmRequestId, accountViewModel)
+    val requestIds = remember(dvmRequestId, previousRequestIds) { listOf(dvmRequestId.idHex) + previousRequestIds }
+    requestIds.forEach { requestId ->
+        key(requestId) {
+            LoadNote(baseNoteHex = requestId, accountViewModel = accountViewModel) { request ->
+                request?.let { EventFinderFilterAssemblerSubscription(it, accountViewModel) }
+            }
+        }
+    }
 
     val resultFlow =
-        remember(dvmRequestId) {
+        remember(requestIds, noteAuthor) {
             accountViewModel.account.cache
                 .observeLatestEvent<NIP90ContentDiscoveryResponseEvent>(
                     Filter(
                         kinds = listOf(NIP90ContentDiscoveryResponseEvent.KIND),
+                        authors = listOf(noteAuthor.pubkeyHex),
                         // A slow DVM's reply can land for a previously re-requested id — watch
                         // those too or the reply is dropped.
-                        tags = mapOf("e" to (listOf(dvmRequestId.idHex) + previousRequestIds)),
+                        tags = mapOf("e" to requestIds),
                         limit = 1,
                     ),
                 )
@@ -213,7 +237,7 @@ fun ObserverContentDiscoveryResponse(
     if (myResponse != null) {
         PrepareViewContentDiscoveryModels(
             noteAuthor,
-            dvmRequestId.idHex,
+            requestIds,
             myResponse,
             onRefresh,
             accountViewModel,
@@ -223,7 +247,6 @@ fun ObserverContentDiscoveryResponse(
         ObserverDvmStatusResponse(
             appDefinition,
             dvmRequestId.idHex,
-            previousRequestIds,
             accountViewModel,
             nav,
         )
@@ -234,7 +257,6 @@ fun ObserverContentDiscoveryResponse(
 fun ObserverDvmStatusResponse(
     appDefinition: Note,
     dvmRequestId: String,
-    previousRequestIds: List<String>,
     accountViewModel: AccountViewModel,
     nav: INav,
 ) {
@@ -244,7 +266,9 @@ fun ObserverDvmStatusResponse(
                 .observeLatestEvent<NIP90StatusEvent>(
                     Filter(
                         kinds = listOf(NIP90StatusEvent.KIND),
-                        tags = mapOf("e" to (listOf(dvmRequestId) + previousRequestIds)),
+                        authors = listOfNotNull(appDefinition.author?.pubkeyHex),
+                        // Feedback from an abandoned request must not mask the new job's status.
+                        tags = mapOf("e" to listOf(dvmRequestId)),
                         limit = 1,
                     ),
                 )
@@ -267,7 +291,7 @@ fun ObserverDvmStatusResponse(
 @Composable
 fun PrepareViewContentDiscoveryModels(
     dvm: User,
-    dvmRequestId: String,
+    requestIds: List<String>,
     latestResponse: NIP90ContentDiscoveryResponseEvent,
     onRefresh: () -> Unit,
     accountViewModel: AccountViewModel,
@@ -275,11 +299,11 @@ fun PrepareViewContentDiscoveryModels(
 ) {
     val resultFeedViewModel: NIP90ContentDiscoveryFeedViewModel =
         viewModel(
-            key = "NostrNIP90ContentDiscoveryFeedViewModel${dvm.pubkeyHex}$dvmRequestId",
-            factory = NIP90ContentDiscoveryFeedViewModel.Factory(accountViewModel.account, dvmKey = dvm.pubkeyHex, requestId = dvmRequestId),
+            key = "NostrNIP90ContentDiscoveryFeedViewModel${dvm.pubkeyHex}${requestIds.joinToString()}",
+            factory = NIP90ContentDiscoveryFeedViewModel.Factory(accountViewModel.account, dvmKey = dvm.pubkeyHex, requestIds = requestIds),
         )
 
-    LaunchedEffect(key1 = dvmRequestId, latestResponse.id) {
+    LaunchedEffect(key1 = requestIds, latestResponse.id) {
         resultFeedViewModel.invalidateData()
     }
 
@@ -319,13 +343,14 @@ fun FeedDVM(
 ) {
     val status = latestStatus.status() ?: return
 
-    var currentStatus by remember {
+    var currentStatus by remember(latestStatus.id) {
         mutableStateOf(status.description)
     }
 
     Column(
         Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(20.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
@@ -514,6 +539,7 @@ fun FeedEmptyWithStatus(
     Column(
         Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(20.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,

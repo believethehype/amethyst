@@ -2855,16 +2855,14 @@ class AccountViewModel(
         return note
     }
 
-    fun requestDVMContentDiscovery(
-        dvmPublicKey: User,
-        onReady: (event: Note) -> Unit,
-    ) {
-        launchSigner {
+    suspend fun requestDVMContentDiscovery(dvmPublicKey: User): Note =
+        withContext(Dispatchers.IO) {
+            var requestNote: Note? = null
             account.requestDVMContentDiscovery(dvmPublicKey) { request, _ ->
-                onReady(LocalCache.getOrCreateNote(request.id))
+                requestNote = LocalCache.getOrCreateNote(request.id)
             }
+            checkNotNull(requestNote)
         }
-    }
 
     suspend fun cachedDVMContentDiscovery(pubkeyHex: String): Note? =
         withContext(Dispatchers.IO) {

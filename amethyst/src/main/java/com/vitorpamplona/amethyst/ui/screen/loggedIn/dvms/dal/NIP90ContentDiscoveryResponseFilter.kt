@@ -32,15 +32,17 @@ import com.vitorpamplona.quartz.nip90Dvms.contentDiscoveryResponse.NIP90ContentD
 open class NIP90ContentDiscoveryResponseFilter(
     val account: Account,
     val dvmkey: String,
-    val request: String,
+    val requests: List<String>,
 ) : AdditiveFeedFilter<Note>() {
     var latestNote: Note? = null
 
-    override fun feedKey(): String = account.userProfile().pubkeyHex + "-" + request
+    override fun feedKey(): String = account.userProfile().pubkeyHex + "-" + requests.joinToString()
 
     fun acceptableEvent(note: Note): Boolean {
         val noteEvent = note.event
-        return noteEvent is NIP90ContentDiscoveryResponseEvent && noteEvent.isTaggedEvent(request)
+        return noteEvent is NIP90ContentDiscoveryResponseEvent &&
+            noteEvent.pubKey == dvmkey &&
+            requests.any { noteEvent.isTaggedEvent(it) }
     }
 
     override fun feed(): List<Note> {

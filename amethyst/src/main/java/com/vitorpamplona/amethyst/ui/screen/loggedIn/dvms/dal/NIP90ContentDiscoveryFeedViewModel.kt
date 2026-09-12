@@ -30,14 +30,14 @@ import com.vitorpamplona.amethyst.ui.screen.AndroidFeedViewModel
 class NIP90ContentDiscoveryFeedViewModel(
     val account: Account,
     dvmKey: String,
-    requestId: String,
-) : AndroidFeedViewModel(NIP90ContentDiscoveryResponseFilter(account, dvmKey, requestId)) {
+    requestIds: List<String>,
+) : AndroidFeedViewModel(NIP90ContentDiscoveryResponseFilter(account, dvmKey, requestIds)) {
     class Factory(
         val account: Account,
         val dvmKey: String,
-        val requestId: String,
+        val requestIds: List<String>,
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
-        override fun <T : ViewModel> create(modelClass: Class<T>): T = NIP90ContentDiscoveryFeedViewModel(account, dvmKey, requestId) as T
+        override fun <T : ViewModel> create(modelClass: Class<T>): T = NIP90ContentDiscoveryFeedViewModel(account, dvmKey, requestIds) as T
     }
 }

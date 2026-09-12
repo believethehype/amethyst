@@ -70,9 +70,12 @@ fun RefresheableBox(
         onRefresh = {
             isRefreshing = true
             scope.launch {
-                onRefresh()
-                delay(500)
-                isRefreshing = false
+                try {
+                    onRefresh()
+                    delay(500)
+                } finally {
+                    isRefreshing = false
+                }
             }
         },
         state = state,

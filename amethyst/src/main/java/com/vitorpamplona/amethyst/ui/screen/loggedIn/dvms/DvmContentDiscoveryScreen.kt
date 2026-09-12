@@ -138,10 +138,13 @@ fun DvmContentDiscoveryScreen(
         remember(appDefinition) {
             mutableStateOf<Note?>(null)
         }
+    var previousRequestIds by remember(appDefinition) { mutableStateOf<List<String>>(emptyList()) }
 
     val onRefresh = {
-        accountViewModel.requestDVMContentDiscovery(noteAuthor) {
-            requestEventID = it
+        accountViewModel.requestDVMContentDiscovery(noteAuthor) { newRequest ->
+            // A slow DVM's reply can land for the previous request — keep observing it.
+            previousRequestIds = (previousRequestIds + listOfNotNull(requestEventID?.idHex)).takeLast(3)
+            requestEventID = newRequest
         }
     }
 
@@ -158,7 +161,14 @@ fun DvmContentDiscoveryScreen(
         Box(modifier = Modifier.fillMaxSize()) {
             val myRequestEventID = requestEventID
             if (myRequestEventID != null) {
-                ObserverContentDiscoveryResponse(appDefinition, myRequestEventID, onRefresh, accountViewModel, nav)
+                ObserverContentDiscoveryResponse(
+                    appDefinition,
+                    myRequestEventID,
+                    previousRequestIds,
+                    onRefresh,
+                    accountViewModel,
+                    nav,
+                )
             } else {
                 // TODO: Make a good splash screen with loading animation for this DVM.
                 FeedEmptyWithStatus(appDefinition, stringRes(Res.string.dvm_requesting_job), accountViewModel, nav)
@@ -174,6 +184,7 @@ fun DvmContentDiscoveryScreen(
 fun ObserverContentDiscoveryResponse(
     appDefinition: Note,
     dvmRequestId: Note,
+    previousRequestIds: List<String>,
     onRefresh: () -> Unit,
     accountViewModel: AccountViewModel,
     nav: INav,
@@ -188,7 +199,9 @@ fun ObserverContentDiscoveryResponse(
                 .observeLatestEvent<NIP90ContentDiscoveryResponseEvent>(
                     Filter(
                         kinds = listOf(NIP90ContentDiscoveryResponseEvent.KIND),
-                        tags = mapOf("e" to listOf(dvmRequestId.idHex)),
+                        // A slow DVM's reply can land for a previously re-requested id — watch
+                        // those too or the reply is dropped.
+                        tags = mapOf("e" to (listOf(dvmRequestId.idHex) + previousRequestIds)),
                         limit = 1,
                     ),
                 )
@@ -210,6 +223,7 @@ fun ObserverContentDiscoveryResponse(
         ObserverDvmStatusResponse(
             appDefinition,
             dvmRequestId.idHex,
+            previousRequestIds,
             accountViewModel,
             nav,
         )
@@ -220,6 +234,7 @@ fun ObserverContentDiscoveryResponse(
 fun ObserverDvmStatusResponse(
     appDefinition: Note,
     dvmRequestId: String,
+    previousRequestIds: List<String>,
     accountViewModel: AccountViewModel,
     nav: INav,
 ) {
@@ -229,7 +244,7 @@ fun ObserverDvmStatusResponse(
                 .observeLatestEvent<NIP90StatusEvent>(
                     Filter(
                         kinds = listOf(NIP90StatusEvent.KIND),
-                        tags = mapOf("e" to listOf(dvmRequestId)),
+                        tags = mapOf("e" to (listOf(dvmRequestId) + previousRequestIds)),
                         limit = 1,
                     ),
                 )

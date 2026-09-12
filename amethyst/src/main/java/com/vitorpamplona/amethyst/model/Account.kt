@@ -3373,9 +3373,11 @@ class Account(
         // watchers may have nowhere to listen for the DVM's 6300/7000 replies until a relay
         // echoes our publish back — which some relays never do.
         relayList.forEach { cache.getOrCreateNote(request).addRelay(it) }
-        onReady(request, relayList.toSet())
         delay(100)
         client.publish(request, relayList)
+        // onReady only after the request is actually published: callers switch their observation
+        // to the new request id at this point, and a reply can only arrive once it's out.
+        onReady(request, relayList.toSet())
     }
 
     fun cachedDecryptContent(note: Note): String? = cachedDecryptContent(note.event)
